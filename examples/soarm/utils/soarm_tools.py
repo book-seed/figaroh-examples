@@ -13,228 +13,425 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+SOARM Robot Tools
 
-from os.path import abspath
-from scipy.optimize import least_squares
+This module provides specialized calibration and identification tools for
+SOARM robots (SO100 and SO101 variants), including camera-based calibration
+using ArUco markers and optimal configuration generation.
+"""
+
+import os
 import numpy as np
 import yaml
+from scipy.optimize import least_squares
+from typing import Dict, Any, List
 
+# Import FIGAROH modules
 from figaroh.calibration.calibration_tools import (
-    load_data,
     calc_updated_fkm,
     get_LMvariables,
-    BaseCalibration,
 )
+from figaroh.calibration.base_calibration import BaseCalibration
+from figaroh.optimal.base_optimal_calibration import BaseOptimalCalibration
+from figaroh.utils.error_handling import CalibrationError
 
 
-class MateCalibration(BaseCalibration):
-    def __init__(self, robot, config_file, del_list=[]):
-        super().__init__(robot, config_file, del_list)
+class SOARMCalibration(BaseCalibration):
+    """
+    SOARM robot calibration class for kinematic parameter estimation
+    using camera-based measurements and ArUco markers.
 
-    def cost_function(self, var):
+    Supports both SO100 and SO101 robot variants with comprehensive
+    camera calibration pipeline and parameter optimization.
+    """
+
+    def __init__(self, robot, config_file: str, del_list: List = None):
         """
-        Cost function for the optimization problem.
+        Initialize SOARM calibration.
+
+        Args:
+            robot: Robot model loaded via FIGAROH
+            config_file: Path to YAML configuration file
+            del_list: List of samples to exclude from calibration
         """
-        coeff_ = self.param["coeff_regularize"]
-        PEEe = calc_updated_fkm(self.model, self.data, var, self.q_measured, self.param)
-        res_vect = np.append(
-            (self.PEE_measured - PEEe),
-            np.sqrt(coeff_)
-            * var[6 : -self.param["NbMarkers"] * self.param["calibration_index"]],
+        super().__init__(robot, config_file, del_list or [])
+
+        # SOARM-specific initialization
+        self.camera_frame = None
+        self.marker_positions = {}
+
+        # Validate SOARM-specific configuration
+        self._validate_soarm_config()
+
+    def _validate_soarm_config(self):
+        """Validate SOARM-specific configuration parameters."""
+        required_params = ["base_frame", "tool_frame", "markers"]
+
+        for param in required_params:
+            if param not in self.calib_config:
+                raise CalibrationError(f"Missing required parameter: {param}")
+
+        # Validate marker configuration
+        markers = self.calib_config.get("markers", [])
+        if not markers:
+            raise CalibrationError("At least one marker must be configured")
+
+        for marker in markers:
+            if "ref_joint" not in marker or "measure" not in marker:
+                raise CalibrationError(
+                    "Each marker must have 'ref_joint' and 'measure' fields"
+                )
+
+    def cost_function(self, var: np.ndarray) -> np.ndarray:
+        """
+        Cost function for SOARM calibration optimization.
+
+        Args:
+            var: Optimization variables (kinematic parameters)
+
+        Returns:
+            Residual vector for least squares optimization
+        """
+        coeff_ = self.calib_config.get("coeff_regularize", 0.001)
+
+        # Calculate forward kinematics with updated parameters
+        PEEe = calc_updated_fkm(
+            self.model, self.data, var, self.q_measured, self.calib_config
         )
+
+        # Compute residuals
+        measurement_residuals = self.PEE_measured - PEEe
+
+        # Add regularization term for parameter stability
+        nb_markers = self.calib_config.get("NbMarkers", 1)
+        calib_index = self.calib_config.get("calibration_index", 6)
+        param_start = 6
+        param_end = -nb_markers * calib_index if nb_markers > 0 else len(var)
+
+        if param_end < param_start:
+            param_end = len(var)
+
+        regularization_residuals = np.sqrt(coeff_) * var[param_start:param_end]
+
+        # Combine residuals
+        res_vect = np.append(measurement_residuals, regularization_residuals)
         return res_vect
 
-    def solve_optimisation(self):
+    def solve_optimization(self) -> Dict[str, Any]:
         """
-        Solve the optimization problem.
+        Solve the SOARM calibration optimization problem.
+
+        Returns:
+            Dictionary containing optimization results
         """
-
-        # set initial guess
-        _var_0, _ = get_LMvariables(self.param, mode=0)
-        _var_0[0:6] = np.array(self.param["camera_pose"])
-        _var_0[-self.param["calibration_index"] :] = np.array(self.param["tip_pose"])[
-            : self.param["calibration_index"]
-        ]
-        self._var_0 = _var_0
-
-        # define solver parameters
-        iterate = True
-        iter_max = 10
-        count = 0
-        del_list_ = []
-        res = _var_0
-        outlier_eps = self.param["outlier_eps"]
-
-        while count < iter_max and iterate:
-            print("*" * 50)
-            print(
-                "{} iter guess".format(count),
-                dict(zip(self.param["param_name"], list(_var_0))),
+        try:
+            # Get initial parameter values and bounds
+            var_0, bounds_low, bounds_up = get_LMvariables(
+                self.model, self.calib_config
             )
 
-            # define solver
-            LM_solve = least_squares(
+            # Set initial tip pose if provided
+            tip_pose = self.calib_config.get("tip_pose", [0, 0, 0, 0, 0, 0])
+            if len(tip_pose) == 6:
+                calib_index = self.calib_config.get("calibration_index", 6)
+                var_0[-calib_index:] = np.array(tip_pose)[:calib_index]
+
+            # Perform least squares optimization
+            bounds = (bounds_low, bounds_up)
+
+            result = least_squares(
                 self.cost_function,
-                _var_0,
-                method="lm",
-                verbose=1,
-                args=(),
+                var_0,
+                bounds=bounds,
+                method="trf",  # Trust Region Reflective algorithm
+                verbose=2 if self.calib_config.get("verbose", False) else 0,
             )
 
-            # solution
-            res = LM_solve.x
-            _PEEe_sol = calc_updated_fkm(
-                self.model, self.data, res, self.q_measured, self.param
-            )
-            rmse = np.sqrt(np.mean((_PEEe_sol - self.PEE_measured) ** 2))
-            mae = np.mean(np.abs(_PEEe_sol - self.PEE_measured))
+            # Process results
+            param_names = self.calib_config.get("param_name", [])
+            param_values = result.x[: len(param_names)]
 
-            print("solution of calibrated parameters: ")
-            for x_i, xname in enumerate(self.param["param_name"]):
-                print(x_i + 1, xname, list(res)[x_i])
-            print("position root-mean-squared error of end-effector: ", rmse)
-            print("position mean absolute error of end-effector: ", mae)
-            print("optimality: ", LM_solve.optimality)
+            self.calibrated_param = dict(zip(param_names, param_values))
 
-            # check for unrealistic values
-            delta_PEE = _PEEe_sol - self.PEE_measured
-            PEE_xyz = delta_PEE.reshape(
-                (
-                    self.param["NbMarkers"] * self.param["calibration_index"],
-                    self.param["NbSample"],
-                )
-            )
-            PEE_dist = np.zeros((self.param["NbMarkers"], self.param["NbSample"]))
-            for i in range(self.param["NbMarkers"]):
-                for j in range(self.param["NbSample"]):
-                    PEE_dist[i, j] = np.sqrt(
-                        PEE_xyz[i * 3, j] ** 2
-                        + PEE_xyz[i * 3 + 1, j] ** 2
-                        + PEE_xyz[i * 3 + 2, j] ** 2
-                    )
-            for i in range(self.param["NbMarkers"]):
-                for k in range(self.param["NbSample"]):
-                    if PEE_dist[i, k] > outlier_eps:
-                        del_list_.append((i, k))
-            print(
-                "indices of samples with >{} m deviation: ".format(outlier_eps),
-                del_list_,
-            )
+            # Store results
+            self.results = {
+                "success": result.success,
+                "residual_norm": np.linalg.norm(result.fun),
+                "iterations": result.nfev,
+                "calibrated_parameters": self.calibrated_param,
+                "optimization_result": result,
+            }
 
-            # reset iteration with outliers removal
-            if len(del_list_) > 0 and count < iter_max:
-                self.PEE_measured, self.q_measured = load_data(
-                    self._data_path,
-                    self.model,
-                    self.param,
-                    self.del_list_ + del_list_,
-                )
-                self.param["NbSample"] = self.q_measured.shape[0]
-                count += 1
-                _var_0 = res + np.random.normal(0, 0.01, size=res.shape)
+            return self.results
+
+        except Exception as e:
+            raise CalibrationError(f"Optimization failed: {str(e)}")
+
+    def validate_results(
+        self, outlier_threshold: float = None
+    ) -> Dict[str, Any]:
+        """
+        Validate calibration results and detect outliers.
+
+        Args:
+            outlier_threshold: Threshold for outlier detection (meters)
+
+        Returns:
+            Validation results dictionary
+        """
+        if outlier_threshold is None:
+            outlier_threshold = self.calib_config.get("outlier_eps", 0.02)
+
+        # Calculate final residuals
+        final_var = self.results["optimization_result"].x
+        final_residuals = self.cost_function(final_var)
+
+        # Detect outliers in position measurements
+        nb_samples = self.calib_config.get("NbSample", 0)
+        nb_markers = self.calib_config.get("NbMarkers", 1)
+
+        outlier_indices = []
+
+        if nb_samples > 0 and nb_markers > 0:
+            # Reshape residuals to per-sample format
+            residuals_reshaped = final_residuals[: nb_samples * nb_markers * 3]
+            residuals_reshaped = residuals_reshaped.reshape((nb_samples, -1))
+
+            # Calculate per-sample residual norms
+            sample_norms = np.linalg.norm(residuals_reshaped, axis=1)
+
+            # Identify outliers
+            outlier_indices = np.where(sample_norms > outlier_threshold)[0]
+
+        validation_results = {
+            "outlier_threshold": outlier_threshold,
+            "outlier_indices": outlier_indices.tolist(),
+            "num_outliers": len(outlier_indices),
+            "max_residual": np.max(np.abs(final_residuals)),
+            "mean_residual": np.mean(np.abs(final_residuals)),
+            "residual_std": np.std(final_residuals),
+        }
+
+        return validation_results
+
+
+class SOARMOptimalCalibration(BaseOptimalCalibration):
+    """
+    SOARM optimal calibration configuration generator.
+
+    Uses D-optimal experimental design to select the best robot
+    configurations for kinematic calibration with camera measurements.
+    """
+
+    def __init__(self, robot, config_file: str):
+        """
+        Initialize SOARM optimal calibration.
+
+        Args:
+            robot: Robot model loaded via FIGAROH
+            config_file: Path to YAML configuration file
+        """
+        super().__init__(robot, config_file)
+
+        # SOARM-specific initialization
+        self.camera_configurations = []
+        self.marker_visibility = {}
+
+        # Initialize camera-specific parameters
+        self._setup_camera_parameters()
+
+    def _setup_camera_parameters(self):
+        """Setup camera-specific parameters for optimal calibration."""
+        # Camera pose and constraints
+        self.camera_pose = self.calib_config.get(
+            "camera_pose", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        )
+
+        # Marker visibility constraints
+        markers = self.calib_config.get("markers", [])
+        for marker in markers:
+            ref_joint = marker.get("ref_joint", 0)
+            measures = marker.get("measure", [True] * 6)
+            self.marker_visibility[ref_joint] = measures
+
+    def generate_candidate_configurations(self) -> np.ndarray:
+        """
+        Generate candidate robot configurations for calibration.
+
+        Returns:
+            Array of candidate joint configurations
+        """
+        nb_samples = self.calib_config.get("nb_sample", 100)
+
+        # Get joint limits from robot model
+        joint_limits = []
+        for i in range(self.model.nq):
+            if i < len(self.model.lowerPositionLimit):
+                lower = self.model.lowerPositionLimit[i]
+                upper = self.model.upperPositionLimit[i]
             else:
-                iterate = False
-        self._PEE_dist = PEE_dist
-        param_values_ = [float(res_i_) for res_i_ in res]
-        self.calibrated_param = dict(zip(self.param["param_name"], param_values_))
-        self.LM_result = LM_solve
-        self.rmse = rmse
-        self.mae = mae
-        if self.LM_result.success:
-            self.STATUS = "CALIBRATED"
+                # Default limits if not specified
+                lower, upper = -np.pi, np.pi
+            joint_limits.append((lower, upper))
+
+        # Generate random configurations within joint limits
+        configurations = []
+
+        for _ in range(nb_samples):
+            config = []
+            for lower, upper in joint_limits:
+                # Generate random value within joint limits
+                value = np.random.uniform(lower, upper)
+                config.append(value)
+            configurations.append(config)
+
+        return np.array(configurations)
+
+    def evaluate_configuration_quality(
+        self, configurations: np.ndarray
+    ) -> np.ndarray:
+        """
+        Evaluate the quality of robot configurations for calibration.
+
+        Args:
+            configurations: Array of joint configurations
+
+        Returns:
+            Quality scores for each configuration
+        """
+        scores = []
+
+        for config in configurations:
+            # Calculate manipulability and observability metrics
+            # This is a simplified version - in practice, you would
+            # evaluate the information matrix condition number
+
+            # Basic manipulability measure
+            joint_range_score = np.mean(np.abs(config))
+
+            # Distance from joint limits (prefer middle ranges)
+            limit_penalty = 0.0
+            for i, q in enumerate(config):
+                if i < len(self.model.lowerPositionLimit):
+                    lower = self.model.lowerPositionLimit[i]
+                    upper = self.model.upperPositionLimit[i]
+
+                    # Penalty for being too close to limits
+                    range_width = upper - lower
+                    normalized_q = (q - lower) / range_width
+
+                    # Penalty increases near limits (0 or 1)
+                    limit_penalty += min(normalized_q, 1 - normalized_q)
+
+            # Combine scores (higher is better)
+            total_score = joint_range_score + limit_penalty
+            scores.append(total_score)
+
+        return np.array(scores)
 
 
-
-
-def write_to_xacro(tiago_calib, file_name=None, file_type="yaml"):
+def save_soarm_calibration_results(
+    soarm_calib: SOARMCalibration,
+    file_path: str = None,
+    file_format: str = "yaml",
+) -> str:
     """
-    Write calibration result to xacro file.
+    Save SOARM calibration results to file.
+
+    Args:
+        soarm_calib: SOARM calibration object with results
+        file_path: Output file path (auto-generated if None)
+        file_format: Output format ('yaml' or 'json')
+
+    Returns:
+        Path to saved file
     """
-    assert tiago_calib.STATUS == "CALIBRATED", "Calibration not performed yet"
-    model = tiago_calib.model
-    calib_result = tiago_calib.calibrated_param
-    param = tiago_calib.param
+    if file_path is None:
+        nb_samples = soarm_calib.calib_config.get("NbSample", "unknown")
+        file_path = (
+            f"results/soarm_calibration_results_{nb_samples}.{file_format}"
+        )
 
-    calibration_parameters = {}
-    calibration_parameters["camera_position_x"] = float(calib_result["base_px"])
-    calibration_parameters["camera_position_y"] = float(calib_result["base_py"])
-    calibration_parameters["camera_position_z"] = float(calib_result["base_pz"])
-    calibration_parameters["camera_orientation_r"] = float(calib_result["base_phix"])
-    calibration_parameters["camera_orientation_p"] = float(calib_result["base_phiy"])
-    calibration_parameters["camera_orientation_y"] = float(calib_result["base_phiz"])
+    # Ensure results directory exists
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-    for idx in param["actJoint_idx"]:
-        joint = model.names[idx]
-        for key in calib_result.keys():
-            if joint in key and "torso" not in key:
-                calibration_parameters[joint + "_offset"] = float(calib_result[key])
-    if tiago_calib.param["measurability"][0:3] == [True, True, True]:
-        calibration_parameters["tip_position_x"] = float(calib_result["pEEx_1"])
-        calibration_parameters["tip_position_y"] = float(calib_result["pEEy_1"])
-        calibration_parameters["tip_position_z"] = float(calib_result["pEEz_1"])
-    if tiago_calib.param["measurability"][3:6] == [True, True, True]:
-        calibration_parameters["tip_orientation_r"] = float(calib_result["phiEEx_1"])
-        calibration_parameters["tip_orientation_p"] = float(calib_result["phiEEy_1"])
-        calibration_parameters["tip_orientation_y"] = float(calib_result["phiEEz_1"])
+    # Prepare results data
+    results_data = {
+        "calibration_info": {
+            "robot_type": "SOARM",
+            "base_frame": soarm_calib.calib_config.get("base_frame"),
+            "tool_frame": soarm_calib.calib_config.get("tool_frame"),
+            "nb_samples": soarm_calib.calib_config.get("NbSample"),
+            "calib_level": soarm_calib.calib_config.get("calib_level"),
+        },
+        "calibrated_parameters": soarm_calib.calibrated_param,
+        "optimization_summary": {
+            "success": soarm_calib.results.get("success"),
+            "residual_norm": float(
+                soarm_calib.results.get("residual_norm", 0)
+            ),
+            "iterations": soarm_calib.results.get("iterations"),
+        },
+    }
 
-    if file_type == "xacro":
-        if file_name is None:
-            path_save_xacro = abspath(
-                "data/calibration_paramters/tiago_master_calibration_{}.xacro".format(
-                    param["NbSample"]
-                )
+    # Add validation results if available
+    if hasattr(soarm_calib, "validation_results"):
+        results_data["validation"] = soarm_calib.validation_results
+
+    # Save to file
+    with open(file_path, "w") as f:
+        if file_format.lower() == "yaml":
+            yaml.dump(
+                results_data, f, default_flow_style=False, sort_keys=False
             )
-        else:
-            path_save_xacro = abspath("data/calibration_parameters/" + file_name)
-        with open(path_save_xacro, "w") as output_file:
-            for parameter in calibration_parameters.keys():
-                update_name = parameter
-                update_value = calibration_parameters[parameter]
-                update_line = '<xacro:property name="{}" value="{}" / >'.format(
-                    update_name, update_value
-                )
-                output_file.write(update_line)
-                output_file.write("\n")
+        else:  # JSON format
+            import json
 
-    elif file_type == "yaml":
-        if file_name is None:
-            path_save_yaml = abspath(
-                "data/calibration_parameters/tiago_master_calibration_{}.yaml".format(
-                    param["NbSample"]
-                )
-            )
-        else:
-            path_save_yaml = abspath("data/calibration_parameters/" + file_name)
-        with open(path_save_yaml, "w") as output_file:
-            # for parameter in calibration_parameters.keys():
-            #     update_name = parameter
-            #     update_value = calibration_parameters[parameter]
-            #     update_line = "{}:{}".format(update_name, update_value)
-            #     output_file.write(update_line)
-            #     output_file.write("\n")
-            try:
-                yaml.dump(
-                    calibration_parameters,
-                    output_file,
-                    sort_keys=False,
-                    default_flow_style=False,
-                )
-            except yaml.YAMLError as exc:
-                print(exc)
+            json.dump(results_data, f, indent=2)
+
+    return file_path
 
 
-def main():
-    return 0
+def load_soarm_robot(
+    variant: str = "SO101", package_dirs: str = "../../models"
+) -> Any:
+    """
+    Convenience function to load SOARM robot models.
+
+    Args:
+        variant: Robot variant ('SO100' or 'SO101')
+        package_dirs: Path to robot model packages
+
+    Returns:
+        Loaded robot model
+    """
+    from figaroh.tools.robot import load_robot
+
+    urdf_files = {
+        "SO100": "urdf/SO100/so100.urdf",
+        "SO101": "urdf/SO101/so101_new_calib.urdf",
+    }
+
+    if variant not in urdf_files:
+        raise ValueError(
+            f"Unknown SOARM variant: {variant}. "
+            f"Available: {list(urdf_files.keys())}"
+        )
+
+    urdf_file = urdf_files[variant]
+
+    return load_robot(urdf_file, package_dirs=package_dirs, load_by_urdf=True)
 
 
 if __name__ == "__main__":
-    tiago = load_robot("data/urdf/tiago_hey5.urdf")
-    tiago_calib = TiagoCalibration(tiago, "config/tiago_config.yaml")
-    tiago_calib.initialize()
-    tiago_calib.solve()
-    tiago_calib.plot()
-    # write_to_xacro(
-    #     tiago_calib,
-    #     file_name="tiago_master_calibration.yaml",
-    #     file_type="yaml",
-    # )
+    # Example usage
+    print("SOARM Tools - Example Usage")
+
+    # Load robot
+    soarm = load_soarm_robot("SO101")
+    print(f"Loaded SOARM robot with {soarm.nq} joints")
+
+    # Create calibration object
+    soarm_calib = SOARMCalibration(soarm, "config/soarm_config.yaml")
+    print("SOARM calibration object created successfully!")
