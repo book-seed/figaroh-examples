@@ -64,3 +64,6 @@ logs/
 tmp/
 temp/
 *.tmp
+
+# Shared development folder (experimental/work-in-progress code)
+examples/shared/

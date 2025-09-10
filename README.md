@@ -76,7 +76,7 @@ tiago_cal = TiagoCalibration(robot, 'config/tiago_config.yaml')
 figaroh-examples/
 ├── examples/                    # Example implementations for different robots
 │   ├── mate/                   # 3DOF manipulator examples  
-│   ├── shared/                 # Shared base classes and utilities
+│   ├── soarm/                  # SOARM robot examples and calibration
 │   ├── staubli_tx40/          # Industrial manipulator examples
 │   ├── talos/                  # Humanoid robot examples
 │   ├── tiago/                  # Mobile manipulator examples
@@ -111,6 +111,14 @@ Location: `examples/ur10/`
 - **Geometric calibration**: Calibrate using ArUco markers and computer vision
 
 Location: `examples/mate/`
+
+### SOARM Robotic Arm
+- **Geometric calibration**: Complete camera calibration pipeline with ArUco markers
+- **Multi-variant support**: SO100 and SO101 robot configurations
+- **Camera-based calibration**: Comprehensive tools for vision-based parameter estimation
+- **Real-time visualization**: Interactive calibration monitoring and validation
+
+Location: `examples/soarm/`
 
 ### Mobile Manipulator TIAGo
 - **Dynamic identification**: Including friction models and actuator inertia
