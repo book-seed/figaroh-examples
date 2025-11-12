@@ -1,0 +1,72 @@
+# Configuration file for ROBOT_TITLE robot calibration and identification
+
+robot:
+  name: "robot_lower"
+  description: "ROBOT_TITLE robot configuration"
+  
+  # Robot model parameters
+  model:
+    urdf_path: "path/to/robot_lower.urdf"
+    package_name: "robot_lower_description"
+    
+  # Joint configuration
+  joints:
+    active_joints:
+      # TODO: List your robot's active joint names
+      - "joint_1"
+      - "joint_2"
+      - "joint_3"
+      - "joint_4"
+      - "joint_5"
+      - "joint_6"
+    
+    # Joint limits [min, max] in radians
+    limits:
+      joint_1: [-3.14, 3.14]
+      joint_2: [-3.14, 3.14]
+      joint_3: [-3.14, 3.14]
+      joint_4: [-3.14, 3.14]
+      joint_5: [-3.14, 3.14]
+      joint_6: [-3.14, 3.14]
+
+# Calibration settings
+calibration:
+  method: "least_squares"
+  max_iterations: 100
+  tolerance: 1e-6
+  
+  # Parameters to calibrate
+  parameters:
+    - "link_lengths"
+    - "joint_offsets"
+    - "link_twists"
+
+# Identification settings  
+identification:
+  method: "weighted_least_squares"
+  regularization: 1e-4
+  
+  # Parameters to identify
+  parameters:
+    - "masses"
+    - "inertias"
+    - "friction_viscous"
+    - "friction_coulomb"
+
+# Optimal trajectory settings
+optimal_trajectory:
+  duration: 10.0  # seconds
+  frequency: 100  # Hz
+  n_segments: 5
+  
+  constraints:
+    position_bounds: true
+    velocity_bounds: true
+    acceleration_bounds: true
+    collision_avoidance: false
+
+# Data paths
+data:
+  calibration_data: "data/calibration/"
+  identification_data: "data/identification/"
+  output_dir: "data/optimal_configurations/"
