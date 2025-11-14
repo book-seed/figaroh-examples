@@ -1,72 +1,73 @@
-# Configuration file for ROBOT_TITLE robot calibration and identification
+# H1v2 Robot Configuration - Unified Format (Standalone)
+# Configuration for Unitree H1v2 humanoid robot
+# This is a standalone configuration without template inheritance
 
+# Comment out extends for now to test standalone mode
+# extends: "templates/humanoid_robot.yaml"
+
+# Configuration metadata
+_metadata:
+  schema_version: "2.0"
+  config_type: "robot_configuration"
+
+# H1v2-specific robot configuration
 robot:
-  name: "robot_lower"
-  description: "ROBOT_TITLE robot configuration"
+  name: "h1v2"
+  description: "Unitree H1v2 humanoid robot"
   
-  # Robot model parameters
-  model:
-    urdf_path: "path/to/robot_lower.urdf"
-    package_name: "robot_lower_description"
+  properties:
+    # H1v2 joint configuration (no wrist)
+    joints:
+      active_joints: ['left_hip_yaw_joint', 'right_hip_yaw_joint', 'torso_joint', 'left_hip_pitch_joint', 'right_hip_pitch_joint', 'left_shoulder_pitch_joint', 'right_shoulder_pitch_joint', 'left_hip_roll_joint', 'right_hip_roll_joint', 'left_shoulder_roll_joint', 'right_shoulder_roll_joint', 'left_knee_joint', 'right_knee_joint', 'left_shoulder_yaw_joint', 'right_shoulder_yaw_joint', 'left_ankle_pitch_joint', 'right_ankle_pitch_joint', 'left_elbow_joint', 'right_elbow_joint', 'left_ankle_roll_joint', 'right_ankle_roll_joint']
+
+      joint_limits:
+        velocity: [23.0, 23.0, 23.0, 23.0, 23.0, 9.0, 9.0, 23.0, 23.0, 9.0, 9.0, 14.0, 14.0, 20.0, 20.0, 9.0, 9.0, 20.0, 20.0, 9.0, 9.0]
+        torque: [200.0, 200.0, 200.0, 200.0, 200.0, 40.0, 40.0, 200.0, 200.0, 40.0, 40.0, 300.0, 300.0, 18.0, 18.0, 60.0, 60.0, 18.0, 18.0, 40.0, 40.0]
     
-  # Joint configuration
-  joints:
-    active_joints:
-      # TODO: List your robot's active joint names
-      - "joint_1"
-      - "joint_2"
-      - "joint_3"
-      - "joint_4"
-      - "joint_5"
-      - "joint_6"
+    # H1v2 mechanical properties
+    mechanics:
+      reduction_ratios: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      ratio_essential: 30.0
+      friction_coefficients:
+        viscous: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        static: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      actuator_inertias: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      joint_offsets: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     
-    # Joint limits [min, max] in radians
-    limits:
-      joint_1: [-3.14, 3.14]
-      joint_2: [-3.14, 3.14]
-      joint_3: [-3.14, 3.14]
-      joint_4: [-3.14, 3.14]
-      joint_5: [-3.14, 3.14]
-      joint_6: [-3.14, 3.14]
+    # H1v2 has coupled wrist
+    coupling:
+      has_coupled_wrist: true
+      Iam6: 0
+      fvm6: 0
+      fsm6: 0
+      
+    # Mobile base properties
+    mobility:
+      has_mobile_base: false
+      base_type: "differential_drive"
+      
+    # Sensor configuration
+    sensors:
+      has_head_camera: false
+      has_torso_camera: false
+      has_ft_sensors: false
 
-# Calibration settings
-calibration:
-  method: "least_squares"
-  max_iterations: 100
-  tolerance: 1e-6
-  
-  # Parameters to calibrate
-  parameters:
-    - "link_lengths"
-    - "joint_offsets"
-    - "link_twists"
-
-# Identification settings  
-identification:
-  method: "weighted_least_squares"
-  regularization: 1e-4
-  
-  # Parameters to identify
-  parameters:
-    - "masses"
-    - "inertias"
-    - "friction_viscous"
-    - "friction_coulomb"
-
-# Optimal trajectory settings
-optimal_trajectory:
-  duration: 10.0  # seconds
-  frequency: 100  # Hz
-  n_segments: 5
-  
-  constraints:
-    position_bounds: true
-    velocity_bounds: true
-    acceleration_bounds: true
-    collision_avoidance: false
-
-# Data paths
-data:
-  calibration_data: "data/calibration/"
-  identification_data: "data/identification/"
-  output_dir: "data/optimal_configurations/"
+# H1v2 task configurations
+tasks:
+  identification:
+    enabled: true
+    
+    problem:
+      include_external_forces: false
+      use_joint_torques: true
+      force_torque_sensors: ["wrist_ft_sensor"]
+      
+      model_components:
+        friction: true
+        joint_offset: true
+        actuator_inertia: true
+        
+    signal_processing:
+      sampling_frequency: 5000.0  # High rate due to 1/0.0002 = 5000Hz
+      cutoff_frequency: 1000000.0  # Signal is already good enough
+      filter_type: "butterworth"
