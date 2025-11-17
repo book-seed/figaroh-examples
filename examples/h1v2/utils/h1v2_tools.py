@@ -9,49 +9,7 @@ import pandas as pd
 from os.path import abspath
 from figaroh.tools.robot import Robot
 from figaroh.identification.base_identification import BaseIdentification
-
-
-class OptimalTrajectoryIPOPT:
-    """
-    Optimal trajectory generation using IPOPT solver.
-    
-    This class handles trajectory optimization for the ROBOT_TITLE robot
-    to generate information-rich motions for parameter identification.
-    """
-    
-    def __init__(self, robot: Robot, active_joints: list, config_file: str):
-        """
-        Initialize the trajectory optimizer.
-        
-        Args:
-            robot: Robot model
-            active_joints: List of joint names to include in optimization
-            config_file: Path to configuration YAML file
-        """
-        self.robot = robot
-        self.active_joints = active_joints
-        self.config_file = config_file
-        
-        print(f"Initialized trajectory optimizer for ROBOT_TITLE")
-        print(f"Active joints: {active_joints}")
-    
-    def solve(self, stack_reps: int = 2):
-        """
-        Solve the trajectory optimization problem.
-        
-        Args:
-            stack_reps: Number of trajectory repetitions to stack
-            
-        Returns:
-            dict: Results containing trajectory segments and metrics
-        """
-        print("Trajectory optimization not yet implemented!")
-        print("Please refer to examples/h1v2/utils/h1v2_tools.py for reference.")
-        return {'T_F': None}
-    
-    def plot_results(self):
-        """Plot the optimization results."""
-        print("Plotting not yet implemented!")
+from figaroh.tools.solver import LinearSolver
 
 
 def load_robot_model(robot_name: str = "robot_lower", **kwargs):
@@ -79,6 +37,9 @@ def load_robot_model(robot_name: str = "robot_lower", **kwargs):
 
 class H1v2Identification(BaseIdentification):
     """H1v2-specific dynamic parameter identification class."""
+    
+    P_BOUND = (0, None)    # Positive or zero (e.g., Mass, Friction, Actuator Inertia)
+    N_BOUND = (None, None) # No bounds (e.g., Offsets, Center-of-Mass products, Cross-Inertia)
     
     def __init__(self, robot, config_file="config/h1v2_config.yaml"):
         """Initialize H1v2 identification with robot model and configuration.
@@ -143,3 +104,166 @@ class H1v2Identification(BaseIdentification):
         #         )
         self.processed_data["torques"] = tau_processed
         return self.processed_data["torques"]
+    
+    def solve_with_custom_solver(
+        self, method='lstsq', regularization=None, alpha=0.0,
+        constraints=None, decimate=False,
+        decimation_factor=1, zero_tolerance=0.001,
+        plotting=False, save_results=False, **solver_kwargs
+    ):
+        """
+        Alternative solving method using advanced linear solver.
+
+        This method provides more flexibility than the default QR-based
+        solve(), offering multiple solving methods, regularization, and
+        constraints.
+
+        Args:
+            method (str): Solving method ('lstsq', 'ridge', 'lasso',
+                'constrained', etc.)
+            regularization (str): Regularization type ('l1', 'l2',
+                'elastic_net')
+            alpha (float): Regularization strength
+            constraints (dict): Linear constraints
+            decimate (bool): Whether to apply decimation
+            decimation_factor (int): Decimation factor if decimate=True
+            zero_tolerance (float): Tolerance for eliminating zero columns
+            plotting (bool): Whether to generate plots
+            save_results (bool): Whether to save parameters to file
+            **solver_kwargs: Additional arguments for LinearSolver
+
+        Returns:
+            ndarray: Identified base parameters
+        """
+        print(f"Starting {self.__class__.__name__} identification "
+              f"with custom solver...")
+
+        # Validate prerequisites
+        self._validate_prerequisites()
+
+        # Step 1: Eliminate zero columns
+        regressor_reduced, active_params = self._eliminate_zero_columns(
+            zero_tolerance
+        )
+
+        # Step 2: Apply decimation if requested
+        if decimate:
+            tau_processed, W_processed = self._apply_decimation(
+                regressor_reduced, decimation_factor
+            )
+        else:
+            tau_processed, W_processed = self._prepare_undecimated_data(
+                regressor_reduced
+            )
+        
+        from figaroh.tools.qrdecomposition import double_QR
+
+        W_base, _, base_parameters, _, phi_std = \
+            double_QR(
+                tau_processed, W_processed, active_params,
+                self.standard_parameter
+            )
+
+        # Step 3: Solve using custom solver
+        solver = LinearSolver(
+            method=method,
+            regularization=regularization,
+            alpha=alpha,
+            constraints=constraints,
+            bounds=self._get_bounds(base_parameters),
+            verbose=True,
+            **solver_kwargs
+        )
+
+        # Step 4: Compute base parameters using QR decomposition
+        phi_base = solver.solve(W_base, tau_processed)
+        base_param_dict = {param: phi_base[i] for i, param in enumerate(base_parameters)}
+        
+        # Store results
+        self.dynamic_regressor_base = W_base
+        self.phi_base = phi_base
+        self.params_base = list(base_param_dict.keys())
+        self.tau_identif = W_base @ phi_base
+        self.tau_noised = tau_processed
+
+        # Step 5: Compute quality metrics and store
+        self._compute_quality_metrics()
+
+        results = {
+            "base_regressor": W_base,
+            "base_param_dict": base_param_dict,
+            "base_parameters": base_parameters,
+            "phi_base": phi_base,
+            "tau_estimated": self.tau_identif,
+            "tau_processed": tau_processed,
+            "solver_info": solver.solver_info,
+            "solver_method": method,
+            "regularization": regularization,
+            "alpha": alpha
+        }
+
+        self._store_results(results)
+
+        # Step 6: Optional plotting
+        if plotting:
+            self.plot_results()
+
+        # Step 7: Optional parameter saving
+        if save_results:
+            self.save_results()
+
+        print(f"  RMSE: {self.rms_error:.6f}")
+        print(f"  Correlation: {self.correlation:.6f}")
+
+        return self.phi_base
+    
+    def _get_bounds(self, variable_list: list[str]) -> list[tuple]:
+        """
+        Dynamically determines the optimization bounds for a list of variable strings.
+
+        The logic is designed to be highly conservative, prioritizing terms that can be 
+        negative or zero (N_BOUND) based on physical meaning or algebraic structure.
+
+        Rules for N_BOUND:
+        1. If the string contains keywords for center-of-mass products (mx, my, mz), offsets (off), 
+        or cross-inertia terms (Ixy, Ixz, Iyz).
+        2. If the string contains a principal moment of inertia (Ixx, Iyy, Izz) AND a subtraction 
+        sign ('-'), indicating a difference of positive quantities which can be negative.
+
+        Otherwise, the variable is assumed to be a non-negative physical quantity (P_BOUND).
+        """
+
+        # Keywords that indicate the variable is physically unbounded (N_BOUND)
+        physical_unbounded_keywords = ['mx', 'my', 'mz', 'off', 'Ixy', 'Ixz', 'Iyz']
+        
+        # Keywords for principal moments of inertia (used for the subtraction check)
+        principal_inertia_keywords = ['Ixx', 'Iyy', 'Izz']
+
+        dynamic_bounds = []
+        
+        for var_string in variable_list:
+            is_unbounded = False
+            
+            # Rule 1: Check for physically unbounded terms (center-of-mass, cross-inertia, offset)
+            for keyword in physical_unbounded_keywords:
+                if keyword in var_string:
+                    is_unbounded = True
+                    break
+            
+            # Rule 2: Check for algebraic difference of principal inertias
+            # This addresses the user's point about the minus sign leading to negative values.
+            if not is_unbounded and '-' in var_string:
+                for keyword in principal_inertia_keywords:
+                    if keyword in var_string:
+                        is_unbounded = True
+                        break
+
+            if is_unbounded:
+                # Assign N_BOUND if any condition for unboundedness is met
+                dynamic_bounds.append(self.N_BOUND)
+            else:
+                # Otherwise, assign P_BOUND (e.g., friction, actuator inertia, or positive sums)
+                dynamic_bounds.append(self.P_BOUND)
+
+        return dynamic_bounds
+
