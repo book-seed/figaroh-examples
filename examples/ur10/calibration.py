@@ -39,7 +39,7 @@ def main():
     # Create calibration object
     ur10_calib = UR10Calibration(
         robot=ur10,
-        config_file="config/ur10_config_new.yaml"
+        config_file="config/ur10_unified_config.yaml"
     )
     
     # Set required parameters that aren't in config file
