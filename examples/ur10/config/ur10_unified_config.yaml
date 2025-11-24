@@ -75,9 +75,9 @@ tasks:
       use_joint_torques: true
       
       model_components:
-        friction: true
-        joint_offset: true
-        actuator_inertia: true
+        friction: false
+        joint_offset: false
+        actuator_inertia: false
         static_regressor: true
         inertia_regressor: true
         
