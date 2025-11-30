@@ -70,6 +70,20 @@ def main():
     config_file = "config/tiago_config.yaml"
     opt_traj = OptimalTrajectoryIPOPT(robot, active_joints, config_file)
 
+    ps = opt_traj.identif_config
+
+    # Joint parameters
+    ps["active_joints"] = active_joints
+    ps["act_Jid"] = [
+        opt_traj.model.getJointId(i) for i in ps["active_joints"]
+    ]
+    ps["act_J"] = [opt_traj.model.joints[jid] for jid in ps["act_Jid"]]
+    ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
+    ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
+
+    # Initialize
+    opt_traj.initialize()
+
     # Run trajectory optimization
     results = opt_traj.solve(stack_reps=2)
 

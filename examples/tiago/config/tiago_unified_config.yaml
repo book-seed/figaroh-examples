@@ -114,6 +114,26 @@ tasks:
     output:
       output_file: "data/optimal_configs/tiago_optimal_configs.yaml"
 
+  optimal_trajectory:      
+    enabled: true
+
+    problem:
+      soft_lim: 0.1     # joint limit discount (increased from 0.05)
+      max_attempts: 500 # maximum attempts to find feasible trajectory
+
+    trajectory:
+      waypoints: 7       # number of waypoints (reduced from 5)
+      frequency: 100     # frequency in Hz (reduced from 100)  
+      segment_duration: 2.0 # window time between waypoints (reduced from 2)
+      
+    constraints:
+      velocity_scaling: 0.5
+      acceleration_scaling: 0.5
+      
+    output:
+      save_trajectory: true
+      output_file: "data/trajectories/_optimal_trajectory.yaml"
+
 # TIAGo-specific custom parameters
 custom:
   manufacturer: "PAL Robotics"

@@ -184,15 +184,26 @@ class OptimalTrajectoryIPOPT(BaseOptimalTrajectory):
     This class extends the BaseOptimalTrajectory to provide TIAGo-specific
     configuration and problem setup.
     """
-    
+
     def __init__(self, robot, active_joints: List[str], 
                  config_file: str = "config/tiago_config.yaml"):
         """Initialize the TIAGo optimal trajectory generator."""
         super().__init__(robot, active_joints, config_file)
         self.logger.info("TIAGo OptimalTrajectoryIPOPT initialized")
-    
-    def _create_ipopt_problem(self, n_joints, n_wps, Ns, tps, vel_wps, acc_wps, 
-                              wp_init, vel_wp_init, acc_wp_init, W_stack):
+
+    def create_ipopt_problem(
+        self,
+        n_joints,
+        n_wps,
+        Ns,
+        tps,
+        vel_wps,
+        acc_wps,
+        wp_init,
+        vel_wp_init,
+        acc_wp_init,
+        W_stack,
+    ):
         """Create TIAGo-specific IPOPT problem instance."""
         return TiagoTrajectoryIPOPTProblem(
             self, n_joints, n_wps, Ns, tps, vel_wps, acc_wps,
