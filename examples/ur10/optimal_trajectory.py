@@ -22,42 +22,68 @@ parent_dir = os.path.dirname(os.path.dirname(current_dir))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from examples.ur10.utils.ur10_tools import UR10OptimalTrajectory
+from examples.ur10.utils.ur10_tools import (
+    UR10OptimalTrajectory,
+    OptimalTrajectoryIPOPT
+)
 from figaroh.tools.robot import load_robot
 
 
 def main():
     """Main function for UR10 optimal trajectory generation."""
-    
+
     # Load UR10 robot model
     ur10 = load_robot(
         "urdf/ur10_robot.urdf",
         package_dirs="../../models",
         load_by_urdf=True,
     )
-    
+    active_joints = [
+        "shoulder_pan_joint",
+        "shoulder_lift_joint",
+        "elbow_joint",
+        "wrist_1_joint",
+        "wrist_2_joint",
+        "wrist_3_joint",
+    ]
     # Create optimal trajectory object
-    ur10_traj = UR10OptimalTrajectory(
-        robot=ur10,
+    ur10_traj = OptimalTrajectoryIPOPT(
+        robot=ur10, active_joints=active_joints,
         config_file="config/ur10_config.yaml"
     )
-    
+    ps = ur10_traj.identif_config
+
+    # Joint parameters
+    ps["active_joints"] = active_joints
+    ps["act_Jid"] = [
+        ur10_traj.model.getJointId(i) for i in ps["active_joints"]
+    ]
+    ps["act_J"] = [ur10_traj.model.joints[jid] for jid in ps["act_Jid"]]
+    ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
+    ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
+
+    # Initialize
+    ur10_traj.initialize()
+
     # Generate optimal trajectory
-    optimal_trajectory = ur10_traj.solve(n_iterations=100)
-    
+    optimal_trajectory = ur10_traj.solve(stack_reps=2)
+
     if optimal_trajectory is not None:
         # Display results
         print("Optimal trajectory generation completed successfully!")
         print(f"Final condition number: {optimal_trajectory['condition_number']:.2f}")
         print(f"Trajectory duration: {ur10_traj.trajectory_duration} seconds")
-        
+
         # Plot and save results
         ur10_traj.plot_results()
         ur10_traj.save_results("results/")
-        
+
         print("Optimal trajectory results saved to results/ directory")
     else:
         print("Failed to generate optimal trajectory. Check constraints and parameters.")
+
+    for i, param in enumerate(ur10_traj.params_base):
+        print(f"{i + 1}. {param}")
 
 
 if __name__ == "__main__":

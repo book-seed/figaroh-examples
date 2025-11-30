@@ -55,6 +55,10 @@ from figaroh.identification.parameter import (
     add_standard_additional_parameters,
     add_custom_parameters,
 )
+from figaroh.optimal.base_optimal_trajectory import (
+    BaseOptimalTrajectory,
+    BaseTrajectoryIPOPTProblem,
+)
 
 # Fallback for config manager and data processor if needed
 try:
@@ -558,3 +562,88 @@ class UR10OptimalTrajectory:
         df.to_csv(os.path.join(output_dir, "ur10_optimal_trajectory.csv"), index=False)
 
         print(f"Results saved to {output_dir}/ur10_optimal_trajectory.yaml and .csv")
+
+
+class OptimalTrajectoryIPOPT(BaseOptimalTrajectory):
+    """
+    UR10-specific optimal trajectory generation using IPOPT.
+
+    This class extends the BaseOptimalTrajectory to provide UR10-specific
+    configuration and problem setup.
+    """
+
+    def __init__(
+        self,
+        robot,
+        active_joints: List[str],
+        config_file: str = "config/ur10_unified_config.yaml",
+    ):
+        """Initialize the UR10 optimal trajectory generator."""
+        super().__init__(robot, active_joints, config_file)
+        self.logger.info("UR10 OptimalTrajectoryIPOPT initialized")
+
+    def create_ipopt_problem(
+        self,
+        n_joints,
+        n_wps,
+        Ns,
+        tps,
+        vel_wps,
+        acc_wps,
+        wp_init,
+        vel_wp_init,
+        acc_wp_init,
+        W_stack,
+    ):
+        """Create UR10-specific IPOPT problem instance."""
+        return UR10TrajectoryIPOPTProblem(
+            self,
+            n_joints,
+            n_wps,
+            Ns,
+            tps,
+            vel_wps,
+            acc_wps,
+            wp_init,
+            vel_wp_init,
+            acc_wp_init,
+            W_stack,
+        )
+
+
+class UR10TrajectoryIPOPTProblem(BaseTrajectoryIPOPTProblem):
+    """
+    UR10-specific IPOPT problem formulation for trajectory optimization.
+
+    This class extends the BaseTrajectoryIPOPTProblem with UR10-specific
+    configurations and constraints.
+    """
+
+    def __init__(
+        self,
+        opt_traj,
+        n_joints,
+        n_wps,
+        Ns,
+        tps,
+        vel_wps,
+        acc_wps,
+        wp_init,
+        vel_wp_init,
+        acc_wp_init,
+        W_stack,
+    ):
+        super().__init__(
+            opt_traj,
+            n_joints,
+            n_wps,
+            Ns,
+            tps,
+            vel_wps,
+            acc_wps,
+            wp_init,
+            vel_wp_init,
+            acc_wp_init,
+            W_stack,
+            "UR10TrajectoryOptimization",
+        )
