@@ -58,7 +58,7 @@ def main():
 
     # 2. Create optimal calibration instance
     print("\n2. Setting up optimal calibration...")
-    opt_calib = UR10OptimalCalibration(robot, "config/ur10_config.yaml")
+    opt_calib = UR10OptimalCalibration(robot, "config/ur10_unified_config.yaml")
     
     print(f"Calibration model: {opt_calib.calib_config['calib_model']}")
     print(f"Minimum configurations required: {opt_calib.minNbChosen}")

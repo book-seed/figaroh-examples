@@ -65,7 +65,7 @@ tasks:
     
     data:
       source_file: "data/calibration.csv"
-      sample_configurations_file: "data/optimal_configs/ur10_optimal_configs.yaml"
+      sample_configurations_file: None
       number_of_samples: 29
 
   identification:
