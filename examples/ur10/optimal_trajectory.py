@@ -13,8 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import sys
 import os
+
+# Configure logging at application entry point
+# Levels: DEBUG < INFO < WARNING < ERROR < CRITICAL
+logging.basicConfig(
+    level=logging.CRITICAL,  # Suppress almost all logging output
+    format="%(name)s - %(levelname)s - %(message)s",
+)
 
 # Add the parent directory to Python path to enable proper imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
