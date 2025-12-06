@@ -2,7 +2,7 @@
 # Configuration for PAL Robotics TALOS humanoid robot (torso-arm system)
 # This configuration extends the humanoid template with TALOS-specific parameters
 
-extends: "../templates/humanoid_robot.yaml"
+extends: "../../templates/humanoid_robot.yaml"
 
 # TALOS-specific robot configuration
 robot:
@@ -16,8 +16,6 @@ robot:
         "torso_1_joint", "torso_2_joint",
         "arm_left_1_joint", "arm_left_2_joint", "arm_left_3_joint", 
         "arm_left_4_joint", "arm_left_5_joint", "arm_left_6_joint", "arm_left_7_joint",
-        "arm_right_1_joint", "arm_right_2_joint", "arm_right_3_joint",
-        "arm_right_4_joint", "arm_right_5_joint", "arm_right_6_joint", "arm_right_7_joint"
       ]
       joint_limits:
         # TALOS has higher torque capabilities than TIAGo
@@ -30,10 +28,10 @@ robot:
                         160.0, 160.0, 160.0, 160.0, 100.0, 100.0, 100.0]
       ratio_essential: 100.0
       friction_coefficients:
-        viscous: [0.0] * 16  # To be identified for all joints
-        static: [0.0] * 16   # To be identified for all joints
-      actuator_inertias: [0.0] * 16  # To be identified
-      joint_offsets: [0.0] * 16      # To be calibrated
+        viscous: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # To be identified for all joints
+        static: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # To be identified for all joints
+      actuator_inertias: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # To be identified
+      joint_offsets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # To be calibrated
     
     # TALOS coupling information
     coupling:
@@ -64,7 +62,7 @@ tasks:
       
     kinematics:
       base_frame: "universe"
-      tool_frame: "arm_left_tool_link"  # Default to left arm
+      tool_frame: "gripper_left_base_link"  # Default to left arm
       
     measurements:
       markers:
@@ -78,7 +76,7 @@ tasks:
         tool_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     
     data:
-      source_file: "data/talos_calibration.csv"
+      source_file: "data/talos_left_arm_02_10_contact.csv"
       sample_configurations_file: "data/optimal_configs/talos_optimal_configs.yaml"
       number_of_samples: 200  # More samples for complex humanoid
 

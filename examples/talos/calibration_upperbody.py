@@ -65,7 +65,7 @@ def main(data_type="experimental", visualization=True, verbose=True):
     print("\nInitializing TALOS calibration...")
     calibration = TALOSCalibration(
         robot=robot,
-        config_file="config/talos_config.yaml"
+        config_file="config/talos_unified_config.yaml"
     )
     
     # Set required parameters that aren't in config file
