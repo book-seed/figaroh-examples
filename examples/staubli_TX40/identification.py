@@ -46,7 +46,7 @@ def main():
     )
 
     # Create TX40 identification object
-    tx40_iden = TX40Identification(robot, "config/TX40_config.yaml")
+    tx40_iden = TX40Identification(robot, "config/staubli_tx40_unified_config.yaml")
 
     # Initialize identification process with data loading and processing
     tx40_iden.initialize()
@@ -56,7 +56,7 @@ def main():
         decimate=True,          # Apply TX40-specific decimation
         plotting=True,          # Generate identification plots
         save_results=False,       # Save parameters to CSV files
-        wls=False               # Use weighted least squares
+        wls=True               # Use weighted least squares
     )
 
     # Print results summary

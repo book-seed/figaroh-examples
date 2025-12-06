@@ -2,7 +2,7 @@
 # Configuration for Staubli TX40 6-DOF SCARA robot
 # This configuration extends the manipulator template with TX40-specific parameters
 
-extends: "../templates/manipulator_robot.yaml"
+extends: "../../templates/manipulator_robot.yaml"
 
 # Staubli TX40-specific robot configuration
 robot:
@@ -25,17 +25,20 @@ robot:
     
     # TX40 mechanical properties
     mechanics:
-      reduction_ratios: [50.0, 50.0, 50.0, 50.0, 50.0, 50.0]
-      ratio_essential: 50.0
+      reduction_ratios: [32.0, 32.0, 45.0, -48.0, 45.0, 32.0]
+      ratio_essential: 30.0
       friction_coefficients:
-        viscous: [0, 0, 0, 0, 0, 0]  # To be identified
-        static: [0, 0, 0, 0, 0, 0]   # To be identified
-      actuator_inertias: [0, 0, 0, 0, 0, 0]  # To be identified
-      joint_offsets: [0, 0, 0, 0, 0, 0]      # To be calibrated
+        viscous: [8.05, 5.53, 1.97, 1.11, 1.86, 0.65]  # To be identified
+        static: [7.14, 8.26, 6.34, 2.48, 3.03, 0.282]   # To be identified
+      actuator_inertias: [0.362, 0.362, 0.0988, 0.0313, 0.0468, 0.0105]  # To be identified
+      joint_offsets: [0.392, 1.37, 0.326, -0.102, -0.0288, 0.127]      # To be calibrated
     
     # TX40 has no coupled joints
     coupling:
-      has_coupled_wrist: false
+      has_coupled_wrist: True
+      Iam6 : 0.00964
+      fvm6 : 0.616
+      fsm6 : 1.95
 
 # Staubli TX40 task configurations
 tasks:
@@ -83,7 +86,7 @@ tasks:
         inertia_regressor: true
         
     signal_processing:
-      sampling_frequency: 1000.0  # High precision robot
+      sampling_frequency: 5000.0  # High precision robot
       cutoff_frequency: 100.0     # Higher cutoff for fast motions
       filter_type: "butterworth"
       filter_order: 4
