@@ -6,6 +6,10 @@ that are specific to working with the ROBOT_TITLE robot.
 """
 
 import pandas as pd
+import re
+import numpy as np
+import matplotlib.pyplot as plt
+import pinocchio as pin
 from os.path import abspath
 from figaroh.tools.robot import Robot
 from figaroh.identification.base_identification import BaseIdentification
@@ -78,33 +82,314 @@ class H1v2Identification(BaseIdentification):
         }
         return self.raw_data
 
-    def process_torque_data(self):
-        """Process torque data with TIAGo-specific motor constants."""
-        import pinocchio as pin
-        
-        # Apply TIAGo-specific torque processing (reduction ratios, etc.)
-        pin.computeSubtreeMasses(self.robot.model, self.robot.data)
-        tau_processed = self.raw_data["torques"].copy()
+    def filter_kinematics_data(self, filter_config=None):
+        self.latest_filter_config = filter_config
 
-        # for i, joint_name in enumerate(self.identif_config["active_joints"]):
-        #     if joint_name == "torso_lift_joint":
-        #         tau_processed[:, i] = (
-        #             self.identif_config["reduction_ratio"][joint_name]
-        #             * self.identif_config["kmotor"][joint_name]
-        #             * self.raw_data["torques"][:, i]
-        #             + 9.81 * self.robot.data.mass[
-        #                 self.robot.model.getJointId(joint_name)
-        #             ]
-        #         )
-        #     else:
-        #         tau_processed[:, i] = (
-        #             self.identif_config["reduction_ratio"][joint_name]
-        #             * self.identif_config["kmotor"][joint_name]
-        #             * self.raw_data["torques"][:, i]
-        #         )
-        self.processed_data["torques"] = tau_processed
+        # --- 1. VALIDATION ---
+        if self.raw_data.get("timestamps") is None:
+            raise ValueError("Timestamps are required for data processing")
+        if self.raw_data.get("positions") is None:
+            raise ValueError("Position data is required for processing")
+        if self.raw_data.get("velocities") is None:
+            raise ValueError("Velocity data is required for processing")
+
+        raw_ts = np.array(self.raw_data["timestamps"]).flatten() 
+        raw_pos = np.array(self.raw_data["positions"])
+        raw_vel = np.array(self.raw_data["velocities"])
+        
+        # --- 2. DETECTION PASS ---
+        dirty_acc = self._differentiate_signal(raw_ts, raw_vel, method=filter_config['differentiation_method'])
+        valid_mask = self._get_valid_mask_from_accel(dirty_acc, sensitivity=25.0, dilation=100)
+        self.valid_segments = self._get_segment_slices(valid_mask)
+
+        # --- 3. PROCESSING ---
+        filtered_pos = self._apply_filters(raw_pos, **filter_config['filter_params'])
+        filtered_vel = self._apply_filters(raw_vel, **filter_config['filter_params'])
+        fd_acc = self._differentiate_signal(raw_ts, filtered_vel, method=filter_config['differentiation_method'])
+        
+        chunks = {"positions": [], "velocities": [], "accelerations": []}     
+
+        for seg in self.valid_segments:
+            seg_pos = filtered_pos[seg]
+            seg_vel = filtered_vel[seg]
+            seg_acc = fd_acc[seg]
+            
+            chunks["positions"].append(seg_pos)
+            chunks["velocities"].append(seg_vel)
+            chunks["accelerations"].append(seg_acc)
+
+        # --- 4. CONCATENATION ---
+        self.processed_data = {}
+        self.processed_data["positions"] = np.vstack(chunks["positions"])
+        self.processed_data["velocities"] = np.vstack(chunks["velocities"])
+        self.processed_data["accelerations"] = np.vstack(chunks["accelerations"])
+
+        dts = np.diff(raw_ts)
+        median_dt = np.median(dts) if len(dts) > 0 else 0.001
+        total_samples = len(self.processed_data["positions"])
+        self.processed_data["timestamps"] = np.arange(total_samples) * median_dt + raw_ts[0]
+
+        # --- 5. PLOTTING ---
+        self._plot_segmentation_results(raw_ts, raw_pos, raw_vel, dirty_acc, valid_mask)
+
+    def process_torque_data(self):
+        """Process torque data using the same segments and filters."""
+        if not hasattr(self, 'valid_segments') or self.valid_segments is None:
+            raise ValueError("Run filter_kinematics_data first.")
+            
+        if self.raw_data.get("torques") is None:
+            print("No torque data found.")
+            return None
+
+        raw_torques = np.array(self.raw_data["torques"])
+        torque_chunks = []
+
+        for seg in self.valid_segments:
+            seg_tau = raw_torques[seg]
+            
+            # Filter Chunk
+            if hasattr(self, 'latest_filter_config') and self.latest_filter_config and 'filter_params' in self.latest_filter_config:
+                seg_tau = self._apply_filters(seg_tau, **self.latest_filter_config['filter_params'])
+            
+            torque_chunks.append(seg_tau)
+
+        self.processed_data["torques"] = np.vstack(torque_chunks)
+        self._plot_single_signal("torques", raw_torques, self.processed_data["torques"])
+        
         return self.processed_data["torques"]
+
+    # --- HELPER METHODS ---
+    def _get_valid_mask_from_accel(self, acc, sensitivity=50.0, dilation=10):
+        """Detects spikes using MAD and dilates by `dilation` frames."""
+        if acc.ndim > 1:
+            metric = np.max(np.abs(acc), axis=1)
+        else:
+            metric = np.abs(acc)
+            
+        median_val = np.median(metric)
+        mad = np.median(np.abs(metric - median_val))
+        if mad < 1e-6: mad = 1e-6
+            
+        modified_z_score = 0.6745 * (metric - median_val) / mad
+        is_spike = modified_z_score > sensitivity
+        
+        # Dilation
+        is_spike_dilated = np.copy(is_spike)
+        for i in range(1, dilation + 1):
+            is_spike_dilated[i:] |= is_spike[:-i]
+            is_spike_dilated[:-i] |= is_spike[i:]
+            
+        return ~is_spike_dilated
+
+    def _get_segment_slices(self, mask):
+        padded = np.concatenate(([False], mask, [False]))
+        transitions = np.flatnonzero(padded[1:] != padded[:-1])
+        slices = []
+        for start, end in zip(transitions[0::2], transitions[1::2]):
+            slices.append(slice(start, end))
+        return slices
+
+    def _plot_segmentation_results(self, raw_ts, r_pos, r_vel, r_acc, mask):
+        """Plots Raw (Blue) vs Filtered (Green) ON THE SAME TIMESTEPS."""
+        import matplotlib.pyplot as plt
+        raw_ts = raw_ts.flatten()
+
+        signals = {
+            "Positions": (r_pos, self.processed_data["positions"]),
+            "Velocities": (r_vel, self.processed_data["velocities"]),
+            "Accelerations": (r_acc, self.processed_data["accelerations"])
+        }
+        
+        bad_segments = self._get_segment_slices(~mask)
+        
+        for name, (raw, clean_stacked) in signals.items():
+            if raw.ndim == 1: raw = raw[:, np.newaxis]
+            n_joints = raw.shape[1]
+            fig, axes = plt.subplots(n_joints, 1, figsize=(10, 3 * n_joints), sharex=True)
+            if n_joints == 1: axes = [axes]
+            
+            fig.suptitle(f'{name}: Segmentation Analysis', fontsize=16)
+
+            for j in range(n_joints):
+                ax = axes[j]
+                
+                # 1. Raw
+                ax.plot(raw_ts, raw[:, j], label='Raw (Dirty)', color='blue', alpha=0.5, linewidth=1)
+                
+                # 2. Rejected
+                for i_bad, seg in enumerate(bad_segments):
+                    t_start = float(raw_ts[seg.start])
+                    t_end = float(raw_ts[seg.stop - 1]) 
+                    lbl = 'Rejected' if i_bad == 0 else ""
+                    ax.axvspan(t_start, t_end, color='red', alpha=0.2, label=lbl)
+
+                # 3. Processed (Segment by Segment on original time)
+                current_idx = 0
+                for i_seg, seg in enumerate(self.valid_segments):
+                    seg_len = seg.stop - seg.start
+                    clean_chunk = clean_stacked[current_idx : current_idx + seg_len, j]
+                    time_chunk = raw_ts[seg]
+                    
+                    lbl = 'Processed' if i_seg == 0 else ""
+                    ax.plot(time_chunk, clean_chunk, color='green', linewidth=2, linestyle='--', label=lbl)
+                    current_idx += seg_len
+
+                ax.set_ylabel(f'Joint {j}')
+                if j == 0: ax.legend(loc='upper right')
+                ax.grid(True, alpha=0.3)
+
+            axes[-1].set_xlabel('Time (s)')
+            plt.tight_layout()
+            plt.show()
+
+    def _plot_single_signal(self, name, raw, clean_stacked):
+        """Helper for Torque plotting."""
+        import matplotlib.pyplot as plt
+        if raw.ndim == 1: raw = raw[:, np.newaxis]
+        n_joints = raw.shape[1]
+        
+        raw_ts = np.array(self.raw_data["timestamps"]).flatten()
+        
+        mask = np.zeros(len(raw), dtype=bool)
+        for seg in self.valid_segments:
+            mask[seg] = True
+        bad_segments = self._get_segment_slices(~mask)
+
+        fig, axes = plt.subplots(n_joints, 1, figsize=(10, 3 * n_joints), sharex=True)
+        if n_joints == 1: axes = [axes]
+        
+        fig.suptitle(f'{name.capitalize()}: Segmentation Analysis', fontsize=16)
+
+        for j in range(n_joints):
+            ax = axes[j]
+            ax.plot(raw_ts, raw[:, j], label='Raw', color='blue', alpha=0.5)
+            
+            for i_bad, seg in enumerate(bad_segments):
+                t_start = float(raw_ts[seg.start])
+                t_end = float(raw_ts[seg.stop - 1])
+                ax.axvspan(t_start, t_end, color='red', alpha=0.2)
+                
+            current_idx = 0
+            for i_seg, seg in enumerate(self.valid_segments):
+                seg_len = seg.stop - seg.start
+                clean_chunk = clean_stacked[current_idx : current_idx + seg_len, j]
+                time_chunk = raw_ts[seg]
+                ax.plot(time_chunk, clean_chunk, color='green', linewidth=2, linestyle='--')
+                current_idx += seg_len
+            
+            ax.set_ylabel(f'Joint {j}')
+            ax.grid(True, alpha=0.3)
+
+        axes[-1].set_xlabel('Time (s)')
+        plt.tight_layout()
+        plt.show()
     
+    def plot_results(self):
+        """
+        Plots measured vs identified vs nominal torques and their respective errors.
+        """
+        try:
+            raw_torques = self.raw_data["torques"]
+            n_joints = raw_torques.shape[1]
+        except (KeyError, AttributeError, IndexError):
+            n_joints = 7
+            print(f"Warning: Could not determine n_joints from raw_data. Defaulting to {n_joints}.")
+
+        tau_measured = self.result.get("torque processed", np.array([]))
+        tau_identified = self.result.get("torque estimated", np.array([]))
+        
+        if len(tau_measured) == 0 or len(tau_identified) == 0:
+            print("No torque data available for plotting")
+            return
+        
+        # --- Reconstruct nominal torques ---
+        # We calculate this first to ensure dimensions match before reshaping
+        tau_nominal = np.zeros((self.processed_data["positions"].shape))
+        for i in range(tau_nominal.shape[0]):
+            tau_nominal[i] = pin.rnea(self.model, 
+                                            self.data, 
+                                            self.processed_data["positions"][i], 
+                                            self.processed_data["velocities"][i], 
+                                            self.processed_data["accelerations"][i]
+                                        )
+        tau_nominal = tau_nominal[:, self.identif_config["act_idxq"]]
+        
+        # --- Reshape Data ---
+        if tau_measured.ndim == 1:
+            tau_measured = tau_measured.reshape(-1, n_joints, order='F')
+        if tau_identified.ndim == 1:
+            tau_identified = tau_identified.reshape(-1, n_joints, order='F')
+
+        # Ensure shapes match across all three signals
+        n_samples = min(len(tau_measured), len(tau_identified), len(tau_nominal))
+        tau_measured = tau_measured[:n_samples]
+        tau_identified = tau_identified[:n_samples]
+        tau_nominal = tau_nominal[:n_samples]
+        
+        # --- Setup Plot ---
+        fig, axes = plt.subplots(n_joints, 2, figsize=(14, 3 * n_joints), sharex='col')
+        
+        if n_joints == 1:
+            axes = axes.reshape(1, -1)
+
+        time_axis = np.arange(n_samples)
+
+        # --- Loop over joints ---
+        for j in range(n_joints):
+            # 1. Calculate Errors
+            error_ident = tau_measured[:, j] - tau_identified[:, j]
+            error_nom = tau_measured[:, j] - tau_nominal[:, j]
+
+            # 2. Calculate RMSEs
+            rmse_ident = np.sqrt(np.mean(error_ident**2))
+            rmse_nom = np.sqrt(np.mean(error_nom**2))
+
+            # --- Left Column: Signal Comparison ---
+            ax_comp = axes[j, 0]
+            ax_comp.plot(time_axis, tau_measured[:, j], label="Measured", color='#1f77b4', alpha=0.6)
+            ax_comp.plot(time_axis, tau_identified[:, j], label="Identified", color='#ff7f0e', alpha=0.8, linestyle='--')
+            ax_comp.plot(time_axis, tau_nominal[:, j], label="Nominal", color="#04d832", alpha=0.5, linestyle='--')
+            
+            ax_comp.set_ylabel(f'Joint {j+1}\nTorque (Nm)', fontweight='bold')
+            
+            # Enhanced Text Box with both RMSEs
+            stats_text = (f"RMSE Ident: {rmse_ident:.4f}\n"
+                        f"RMSE Nom:   {rmse_nom:.4f}")
+            ax_comp.text(0.02, 0.95, stats_text, transform=ax_comp.transAxes, 
+                            bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray', boxstyle='round'), 
+                            verticalalignment='top', fontfamily='monospace', fontsize=9)
+            
+            ax_comp.grid(True, alpha=0.3)
+            
+            if j == 0:
+                ax_comp.set_title("Torque Tracking (Measured vs Models)")
+                ax_comp.legend(loc='upper right', framealpha=0.9)
+
+            # --- Right Column: Error Comparison ---
+            ax_err = axes[j, 1]
+            
+            # Plot Nominal Error first (background, typically larger)
+            ax_err.plot(time_axis, error_nom, label="Meas - Nom", color='#04d832', alpha=0.4)
+            # Plot Identified Error second (foreground, typically smaller)
+            ax_err.plot(time_axis, error_ident, label="Meas - Ident", color='#d62728', alpha=0.8)
+            
+            ax_err.axhline(0, color='k', linewidth=0.8, alpha=0.5) 
+            ax_err.set_ylabel('Error (Nm)')
+            ax_err.grid(True, alpha=0.3)
+            
+            if j == 0:
+                ax_err.set_title("Residual Errors")
+                ax_err.legend(loc='upper right')
+
+            # X-labels only on bottom
+            if j == n_joints - 1:
+                ax_comp.set_xlabel('Sample')
+                ax_err.set_xlabel('Sample')
+
+        plt.suptitle(f'{self.__class__.__name__} Results Analysis', fontsize=16)
+        plt.tight_layout(rect=[0, 0.03, 1, 0.97]) 
+        plt.show()
+        
     def solve_with_custom_solver(
         self, method='lstsq', regularization=None, alpha=0.0,
         constraints=None, decimate=False,
@@ -219,51 +504,31 @@ class H1v2Identification(BaseIdentification):
     
     def _get_bounds(self, variable_list: list[str]) -> list[tuple]:
         """
-        Dynamically determines the optimization bounds for a list of variable strings.
-
-        The logic is designed to be highly conservative, prioritizing terms that can be 
-        negative or zero (N_BOUND) based on physical meaning or algebraic structure.
-
-        Rules for N_BOUND:
-        1. If the string contains keywords for center-of-mass products (mx, my, mz), offsets (off), 
-        or cross-inertia terms (Ixy, Ixz, Iyz).
-        2. If the string contains a principal moment of inertia (Ixx, Iyy, Izz) AND a subtraction 
-        sign ('-'), indicating a difference of positive quantities which can be negative.
-
-        Otherwise, the variable is assumed to be a non-negative physical quantity (P_BOUND).
-        """
-
-        # Keywords that indicate the variable is physically unbounded (N_BOUND)
-        physical_unbounded_keywords = ['mx', 'my', 'mz', 'off', 'Ixy', 'Ixz', 'Iyz']
+        Dynamically determines optimization bounds based on the Leading Term 
+        and the algebraic structure of the Base Parameter linear combination.
         
-        # Keywords for principal moments of inertia (used for the subtraction check)
-        principal_inertia_keywords = ['Ixx', 'Iyy', 'Izz']
+        P_BOUND (0, +inf): Principal Inertias (Ixx, Iyy, Izz, Ia), Friction (fv, fs), Mass (m).
+        N_BOUND (-inf, +inf): Static Moments (mx, my, mz), Products of Inertia (Ixy...), 
+                            Offsets, and DIFFERENCES of Principal Inertias (e.g. Ixx - Iyy).
+        """
+        unbounded_prefixes = ('mx', 'my', 'mz', 'off', 'Ixy', 'Ixz', 'Iyz')
+    
+        subtracted_inertia_pattern = re.compile(r'-\s*(?:[\d\.]+(?:e[+-]?\d+)?\*)?I[xyz]{2}')
 
         dynamic_bounds = []
-        
-        for var_string in variable_list:
-            is_unbounded = False
-            
-            # Rule 1: Check for physically unbounded terms (center-of-mass, cross-inertia, offset)
-            for keyword in physical_unbounded_keywords:
-                if keyword in var_string:
-                    is_unbounded = True
-                    break
-            
-            # Rule 2: Check for algebraic difference of principal inertias
-            # This addresses the user's point about the minus sign leading to negative values.
-            if not is_unbounded and '-' in var_string:
-                for keyword in principal_inertia_keywords:
-                    if keyword in var_string:
-                        is_unbounded = True
-                        break
 
-            if is_unbounded:
-                # Assign N_BOUND if any condition for unboundedness is met
-                dynamic_bounds.append(self.N_BOUND)
-            else:
-                # Otherwise, assign P_BOUND (e.g., friction, actuator inertia, or positive sums)
-                dynamic_bounds.append(self.P_BOUND)
+        for var_string in variable_list:
+            leading_term = var_string.split()[0]
+            bound_type = self.P_BOUND
+            
+            # --- Check 1: Is the leading term inherently unbounded? ---
+            if leading_term.startswith(unbounded_prefixes):
+                bound_type = self.N_BOUND
+            
+            # --- Check 2: Special Case - Difference of Principal Inertias ---
+                if subtracted_inertia_pattern.search(var_string):
+                    bound_type = self.N_BOUND
+                            
+            dynamic_bounds.append(bound_type)
 
         return dynamic_bounds
-
