@@ -31,11 +31,14 @@ def main():
     h1v2 = load_robot( 
         "urdf/h1_2_handless.urdf",
         load_by_urdf=True,
-        # robot_pkg="h12"
     )
 
     # Create identification object
     h1v2_iden = H1v2Identification(h1v2, "config/h1v2_config.yaml")
+    h1v2_iden.filter_config = {
+            'differentiation_method': 'gradient',
+            'filter_params': {'nbutter': 4, 'f_butter': 5, 'med_fil': 5, 'f_sample': 500}
+        }
 
     # Define additional parameters excluded from yaml files
     ps = h1v2_iden.identif_config
@@ -64,7 +67,8 @@ def main():
         'right_ankle_roll_joint': 1.0
     }
     
-    ps["active_joints"] = ['left_hip_yaw_joint', 'right_hip_yaw_joint', 'torso_joint', 'left_hip_pitch_joint', 'right_hip_pitch_joint', 'left_shoulder_pitch_joint', 'right_shoulder_pitch_joint', 'left_hip_roll_joint', 'right_hip_roll_joint', 'left_shoulder_roll_joint', 'right_shoulder_roll_joint', 'left_knee_joint', 'right_knee_joint', 'left_shoulder_yaw_joint', 'right_shoulder_yaw_joint', 'left_ankle_pitch_joint', 'right_ankle_pitch_joint', 'left_elbow_joint', 'right_elbow_joint', 'left_ankle_roll_joint', 'right_ankle_roll_joint']
+    # ps["active_joints"] = ['left_hip_yaw_joint', 'right_hip_yaw_joint', 'torso_joint', 'left_hip_pitch_joint', 'right_hip_pitch_joint', 'left_shoulder_pitch_joint', 'right_shoulder_pitch_joint', 'left_hip_roll_joint', 'right_hip_roll_joint', 'left_shoulder_roll_joint', 'right_shoulder_roll_joint', 'left_knee_joint', 'right_knee_joint', 'left_shoulder_yaw_joint', 'right_shoulder_yaw_joint', 'left_ankle_pitch_joint', 'right_ankle_pitch_joint', 'left_elbow_joint', 'right_elbow_joint', 'left_ankle_roll_joint', 'right_ankle_roll_joint']
+    ps["active_joints"] = ['left_shoulder_pitch_joint', 'left_shoulder_roll_joint', 'left_shoulder_yaw_joint', 'left_elbow_joint']
 
     # Joint parameters
     ps["act_Jid"] = [h1v2_iden.model.getJointId(i) for i in ps["active_joints"]]
@@ -77,17 +81,12 @@ def main():
     ps["vel_data"] = "data/identification/h1_velocity.csv"
     ps["torque_data"] = "data/identification/h1_effort.csv"
 
-    # Initialize identification process
-    # Note: truncate parameter now accepts:
-    # - None: no truncation
-    # - (start, end): custom truncation indices
-    h1v2_iden.initialize()
-
+    h1v2_iden.initialize(truncate=(14_000, 44_000))
+    
     # Solve identification
-    h1v2_iden.solve_with_custom_solver(
-        method="constrained",
-        decimate=True,
-        decimation_factor=10,
+    h1v2_iden.solve(
+        decimate=True, 
+        decimation_factor=1,
         plotting=True,
         save_results=True,
     )
