@@ -35,10 +35,7 @@ def main():
 
     # Create identification object
     h1v2_iden = H1v2Identification(h1v2, "config/h1v2_config.yaml")
-    h1v2_iden.filter_config = {
-            'differentiation_method': 'gradient',
-            'filter_params': {'nbutter': 4, 'f_butter': 5, 'med_fil': 5, 'f_sample': 500}
-        }
+    h1v2_iden.filter_config = {'differentiation_method': 'gradient', 'filter_params': {'window_length': 301, 'polyorder': 3, 'mode': 'nearest'}}
 
     # Define additional parameters excluded from yaml files
     ps = h1v2_iden.identif_config
