@@ -8,6 +8,7 @@ that are specific to working with the ROBOT_TITLE robot.
 import pandas as pd
 import re
 import numpy as np
+from scipy.signal import savgol_filter
 import matplotlib.pyplot as plt
 import pinocchio as pin
 from os.path import abspath
@@ -82,6 +83,36 @@ class H1v2Identification(BaseIdentification):
         }
         return self.raw_data
 
+    def _apply_filters(self, data, delta=0.001, window_length=11, polyorder=11, deriv=0, **kwargs):
+        """
+        Applies a Savitzky-Golay filter with derivative support.
+        
+        Args:
+            data (np.array): Input data.
+            delta (float): The time step (sampling spacing). Essential for correct derivative scaling.
+            window_length (int): Length of the filter window.
+            polyorder (int): Order of the polynomial.
+            deriv (int): The order of the derivative to compute (0=smooth, 1=vel, 2=acc).
+        """
+        if len(data) == 0:
+            return data
+
+        # SavGol requires window_length to be odd
+        if window_length % 2 == 0:
+            window_length += 1
+            
+        # SavGol requires window_length <= size of data
+        if window_length > len(data):
+            window_length = len(data) if len(data) % 2 != 0 else len(data) - 1
+            if window_length < polyorder + 2:
+                # Fallback if data is too short for the requested polyorder
+                return data 
+
+        # axis=0 ensures we filter over time (rows), not across joints (cols)
+        # delta ensures derivatives are scaled correctly by time
+        return savgol_filter(data, window_length=window_length, polyorder=polyorder, 
+                             deriv=deriv, delta=delta, axis=0, **kwargs)
+    
     def filter_kinematics_data(self, filter_config=None):
         self.latest_filter_config = filter_config
 
@@ -97,40 +128,43 @@ class H1v2Identification(BaseIdentification):
         raw_pos = np.array(self.raw_data["positions"])
         raw_vel = np.array(self.raw_data["velocities"])
         
+        dts = np.diff(raw_ts)
+        median_dt = np.median(dts) if len(dts) > 0 else 0.001
+        
         # --- 2. DETECTION PASS ---
         dirty_acc = self._differentiate_signal(raw_ts, raw_vel, method=filter_config['differentiation_method'])
-        valid_mask = self._get_valid_mask_from_accel(dirty_acc, sensitivity=25.0, dilation=100)
+        valid_mask = self._get_valid_mask_from_accel(dirty_acc, sensitivity=50.0, dilation=50)
         self.valid_segments = self._get_segment_slices(valid_mask)
-
-        # --- 3. PROCESSING ---
-        filtered_pos = self._apply_filters(raw_pos, **filter_config['filter_params'])
-        filtered_vel = self._apply_filters(raw_vel, **filter_config['filter_params'])
-        fd_acc = self._differentiate_signal(raw_ts, filtered_vel, method=filter_config['differentiation_method'])
+        
+        # 3a. Smooth Position (deriv=0)
+        filtered_pos = self._apply_filters(raw_pos, delta=median_dt, deriv=0, **filter_config['filter_params'])
+        filtered_vel = self._apply_filters(raw_pos, delta=median_dt, deriv=1, **filter_config['filter_params'])
+        filtered_acc = self._apply_filters(raw_pos, delta=median_dt, deriv=2, **filter_config['filter_params'])
         
         chunks = {"positions": [], "velocities": [], "accelerations": []}     
 
         for seg in self.valid_segments:
-            seg_pos = filtered_pos[seg]
-            seg_vel = filtered_vel[seg]
-            seg_acc = fd_acc[seg]
-            
-            chunks["positions"].append(seg_pos)
-            chunks["velocities"].append(seg_vel)
-            chunks["accelerations"].append(seg_acc)
+            chunks["positions"].append(filtered_pos[seg])
+            chunks["velocities"].append(filtered_vel[seg])
+            chunks["accelerations"].append(filtered_acc[seg])
 
         # --- 4. CONCATENATION ---
         self.processed_data = {}
-        self.processed_data["positions"] = np.vstack(chunks["positions"])
-        self.processed_data["velocities"] = np.vstack(chunks["velocities"])
-        self.processed_data["accelerations"] = np.vstack(chunks["accelerations"])
+        if chunks["positions"]:
+            self.processed_data["positions"] = np.vstack(chunks["positions"])
+            self.processed_data["velocities"] = np.vstack(chunks["velocities"])
+            self.processed_data["accelerations"] = np.vstack(chunks["accelerations"])
 
-        dts = np.diff(raw_ts)
-        median_dt = np.median(dts) if len(dts) > 0 else 0.001
-        total_samples = len(self.processed_data["positions"])
-        self.processed_data["timestamps"] = np.arange(total_samples) * median_dt + raw_ts[0]
+            total_samples = len(self.processed_data["positions"])
+            self.processed_data["timestamps"] = np.arange(total_samples) * median_dt + raw_ts[0]
+        else:
+            print("Warning: All data segments were rejected.")
+            self.processed_data = {k: np.array([]) for k in ["positions", "velocities", "accelerations", "timestamps"]}
 
         # --- 5. PLOTTING ---
-        self._plot_segmentation_results(raw_ts, raw_pos, raw_vel, dirty_acc, valid_mask)
+        # Note: We plot raw velocities/accels (calculated roughly) vs SavGol results
+        raw_vel_plot = np.array(self.raw_data["velocities"]) if self.raw_data.get("velocities") is not None else raw_vel
+        self._plot_segmentation_results(raw_ts, raw_pos, raw_vel_plot, dirty_acc, valid_mask)
 
     def process_torque_data(self):
         """Process torque data using the same segments and filters."""
@@ -142,21 +176,23 @@ class H1v2Identification(BaseIdentification):
             return None
 
         raw_torques = np.array(self.raw_data["torques"])
+        # Get delta for consistency
+        raw_ts = np.array(self.raw_data["timestamps"]).flatten()
+        dts = np.diff(raw_ts)
+        median_dt = np.median(dts) if len(dts) > 0 else 0.001
+        raw_torques = self._apply_filters(raw_torques, delta=median_dt, deriv=0, **self.latest_filter_config['filter_params'])
+
         torque_chunks = []
 
         for seg in self.valid_segments:
             seg_tau = raw_torques[seg]
-            
-            # Filter Chunk
-            if hasattr(self, 'latest_filter_config') and self.latest_filter_config and 'filter_params' in self.latest_filter_config:
-                seg_tau = self._apply_filters(seg_tau, **self.latest_filter_config['filter_params'])
-            
             torque_chunks.append(seg_tau)
 
-        self.processed_data["torques"] = np.vstack(torque_chunks)
-        self._plot_single_signal("torques", raw_torques, self.processed_data["torques"])
-        
-        return self.processed_data["torques"]
+        if torque_chunks:
+            self.processed_data["torques"] = np.vstack(torque_chunks)
+            self._plot_single_signal("torques", raw_torques, self.processed_data["torques"])
+            return self.processed_data["torques"]
+        return np.array([])
 
     # --- HELPER METHODS ---
     def _get_valid_mask_from_accel(self, acc, sensitivity=50.0, dilation=10):
