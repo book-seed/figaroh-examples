@@ -16,29 +16,14 @@ from figaroh.tools.robot import Robot
 from figaroh.identification.base_identification import BaseIdentification
 from figaroh.tools.solver import LinearSolver
 
-
-def load_robot_model(robot_name: str = "robot_lower", **kwargs):
-    """
-    Load the ROBOT_TITLE robot model.
-    
-    Args:
-        robot_name: Name/identifier for the robot
-        **kwargs: Additional arguments for robot loading
-        
-    Returns:
-        Robot: Loaded robot model
-    """
-    from figaroh.tools.robot import load_robot
-    
-    # TODO: Update with correct parameters for your robot
-    robot = load_robot(
-        robot_name=robot_name,
-        load_by_urdf=True,
-        robot_pkg="robot_lower_description",
-        **kwargs
-    )
-    
-    return robot
+from figaroh.identification.identification_tools import get_standard_parameters
+from figaroh.tools.regressor import (
+    build_regressor_basic,
+    get_index_eliminate,
+    build_regressor_reduced,
+    build_total_regressor_current
+)
+from figaroh.tools.qrdecomposition import get_baseParams
 
 class H1v2Identification(BaseIdentification):
     """H1v2-specific dynamic parameter identification class."""
@@ -56,14 +41,100 @@ class H1v2Identification(BaseIdentification):
         super().__init__(robot, config_file)
         print("H1v2Identification initialized for H1v2 robot")
     
-    def load_trajectory_data(self):
+    def initialize_global(self, data_pathes_A, data_pathes_B, truncate_A=None, truncate_B=None):
+        # Experiment A
+        self.processed_data_A, self.num_samples_A = self.process_data(data_pathes=data_pathes_A, truncate=truncate_A)
+        
+        # Experiment B
+        self.processed_data_B, self.num_samples_B = self.process_data(data_pathes=data_pathes_B, truncate=truncate_B)
+        
+    def process_data(self, data_pathes, truncate=None):
+        """Load and process data"""
+        filter_config = self.filter_config
+        raw_data = self.load_trajectory_data(data_pathes)
+        raw_data = self._truncate_data(raw_data, truncate)
+        processed_data, valid_segments = self.filter_kinematics_data(raw_data, filter_config)
+        processed_data["torques"] = self.process_torque_data(raw_data, processed_data, valid_segments)
+        num_samples = processed_data["positions"].shape[0]
+        processed_data = self._build_full_configuration(processed_data, num_samples)
+                
+        return processed_data, num_samples
+
+    def calculate_full_regressor(self, model, processed_data, num_samples):
+        """Build regressor matrix, compute pre-identified values of standard 
+        parameters, compute joint torques based on pre-identified standard 
+        parameters."""
+        # Build full regressor matrix
+        dynamic_regressor = build_regressor_basic(
+            self.robot,
+            processed_data["positions"],
+            processed_data["velocities"],
+            processed_data["accelerations"],
+            self.identif_config,
+        )
+        
+        # Compute standard parameters
+        standard_parameter = get_standard_parameters(model, self.identif_config)
+
+        # Convert all string values to floats in the standard_parameter dict
+        for key, value in standard_parameter.items():
+            if isinstance(value, str):
+                standard_parameter[key] = float(value)
+
+        # joint torque estimated from p,v,a with std params
+        phi_ref = np.array(list(standard_parameter.values()))
+        tau_ref = np.dot(dynamic_regressor, phi_ref)
+
+        # filter only active joints
+        tau_ref = tau_ref[range(len(self.identif_config["act_idxv"]) * num_samples)]
+        
+        return dynamic_regressor, standard_parameter, tau_ref
+    
+    def _build_full_configuration(self, processed_data, num_samples):
+        """Build full configuration arrays for position, velocity, acceleration.
+        
+        This method expands the active joint data to full robot configuration
+        by filling in default values for inactive joints. Uses vectorized
+        operations for optimal performance.
+        """
+        # Validate required data
+        required_keys = ["positions", "velocities", "accelerations"]
+        for key in required_keys:
+            if key not in processed_data or processed_data[key] is None:
+                raise ValueError(f"Missing required data: {key}")
+
+        # Get active joint data
+        q_active = processed_data["positions"]
+        dq_active = processed_data["velocities"]
+        ddq_active = processed_data["accelerations"]
+
+        # Create full configuration arrays efficiently
+        config_data = [
+            (q_active, np.zeros_like(self.robot.q0), self.identif_config["act_idxq"]),
+            (dq_active, np.zeros_like(self.robot.v0), self.identif_config["act_idxv"]),
+            (ddq_active, np.zeros_like(self.robot.v0), self.identif_config["act_idxv"])
+        ]
+
+        full_configs = []
+        for active_data, default_config, active_indices in config_data:
+            # Initialize with defaults
+            full_config = np.tile(default_config, (num_samples, 1))
+            # Fill active joints
+            full_config[:, active_indices] = active_data
+            full_configs.append(full_config)
+
+        # Update processed data efficiently
+        config_keys = ["positions", "velocities", "accelerations"]
+        processed_data.update(dict(zip(config_keys, full_configs)))
+        
+        return processed_data
+        
+    def load_trajectory_data(self, data_pathes):
         """Load and process CSV data for TIAGo robot."""
-        ts = pd.read_csv(
-            abspath(self.identif_config["pos_data"]), usecols=[0]
-        ).to_numpy()
-        pos = pd.read_csv(abspath(self.identif_config["pos_data"]))
-        vel = pd.read_csv(abspath(self.identif_config["vel_data"]))
-        eff = pd.read_csv(abspath(self.identif_config["torque_data"]))
+        ts = pd.read_csv(abspath(data_pathes["pos_data"]), usecols=[0]).to_numpy()
+        pos = pd.read_csv(abspath(data_pathes["pos_data"]))
+        vel = pd.read_csv(abspath(data_pathes["vel_data"]))
+        eff = pd.read_csv(abspath(data_pathes["torque_data"]))
 
         cols = {"pos": [], "vel": [], "eff": []}
         for jn in self.identif_config["active_joints"]:
@@ -74,14 +145,14 @@ class H1v2Identification(BaseIdentification):
         q = pos[cols["pos"]].to_numpy()
         dq = vel[cols["vel"]].to_numpy()
         tau = eff[cols["eff"]].to_numpy()
-        self.raw_data = {
+        
+        return {
             "timestamps": ts,
             "positions": q,
             "velocities": dq,
             "accelerations": None,
             "torques": tau
         }
-        return self.raw_data
 
     def _apply_filters(self, data, delta=0.001, window_length=11, polyorder=11, deriv=0, **kwargs):
         """
@@ -112,29 +183,29 @@ class H1v2Identification(BaseIdentification):
         # delta ensures derivatives are scaled correctly by time
         return savgol_filter(data, window_length=window_length, polyorder=polyorder, 
                              deriv=deriv, delta=delta, axis=0, **kwargs)
-    
-    def filter_kinematics_data(self, filter_config=None):
+        
+    def filter_kinematics_data(self, raw_data, filter_config=None):
         self.latest_filter_config = filter_config
 
         # --- 1. VALIDATION ---
-        if self.raw_data.get("timestamps") is None:
+        if raw_data.get("timestamps") is None:
             raise ValueError("Timestamps are required for data processing")
-        if self.raw_data.get("positions") is None:
+        if raw_data.get("positions") is None:
             raise ValueError("Position data is required for processing")
-        if self.raw_data.get("velocities") is None:
+        if raw_data.get("velocities") is None:
             raise ValueError("Velocity data is required for processing")
 
-        raw_ts = np.array(self.raw_data["timestamps"]).flatten() 
-        raw_pos = np.array(self.raw_data["positions"])
-        raw_vel = np.array(self.raw_data["velocities"])
+        raw_ts = np.array(raw_data["timestamps"]).flatten() 
+        raw_pos = np.array(raw_data["positions"])
+        raw_vel = np.array(raw_data["velocities"])
         
         dts = np.diff(raw_ts)
         median_dt = np.median(dts) if len(dts) > 0 else 0.001
         
         # --- 2. DETECTION PASS ---
         dirty_acc = self._differentiate_signal(raw_ts, raw_vel, method=filter_config['differentiation_method'])
-        valid_mask = self._get_valid_mask_from_accel(dirty_acc, sensitivity=50.0, dilation=50)
-        self.valid_segments = self._get_segment_slices(valid_mask)
+        valid_mask = self._get_valid_mask_from_accel(dirty_acc, sensitivity=50.0, dilation=10)
+        valid_segments = self._get_segment_slices(valid_mask)
         
         # 3a. Smooth Position (deriv=0)
         filtered_pos = self._apply_filters(raw_pos, delta=median_dt, deriv=0, **filter_config['filter_params'])
@@ -143,58 +214,53 @@ class H1v2Identification(BaseIdentification):
         
         chunks = {"positions": [], "velocities": [], "accelerations": []}     
 
-        for seg in self.valid_segments:
+        for seg in valid_segments:
             chunks["positions"].append(filtered_pos[seg])
             chunks["velocities"].append(filtered_vel[seg])
             chunks["accelerations"].append(filtered_acc[seg])
 
         # --- 4. CONCATENATION ---
-        self.processed_data = {}
+        processed_data = {}
         if chunks["positions"]:
-            self.processed_data["positions"] = np.vstack(chunks["positions"])
-            self.processed_data["velocities"] = np.vstack(chunks["velocities"])
-            self.processed_data["accelerations"] = np.vstack(chunks["accelerations"])
+            processed_data["positions"] = np.vstack(chunks["positions"])
+            processed_data["velocities"] = np.vstack(chunks["velocities"])
+            processed_data["accelerations"] = np.vstack(chunks["accelerations"])
 
-            total_samples = len(self.processed_data["positions"])
-            self.processed_data["timestamps"] = np.arange(total_samples) * median_dt + raw_ts[0]
+            total_samples = len(processed_data["positions"])
+            processed_data["timestamps"] = np.arange(total_samples) * median_dt + raw_ts[0]
         else:
             print("Warning: All data segments were rejected.")
-            self.processed_data = {k: np.array([]) for k in ["positions", "velocities", "accelerations", "timestamps"]}
+            processed_data = {k: np.array([]) for k in ["positions", "velocities", "accelerations", "timestamps"]}
 
         # --- 5. PLOTTING ---
-        # Note: We plot raw velocities/accels (calculated roughly) vs SavGol results
-        raw_vel_plot = np.array(self.raw_data["velocities"]) if self.raw_data.get("velocities") is not None else raw_vel
-        self._plot_segmentation_results(raw_ts, raw_pos, raw_vel_plot, dirty_acc, valid_mask)
+        raw_vel_plot = np.array(raw_data["velocities"]) if raw_data.get("velocities") is not None else raw_vel
+        # self._plot_segmentation_results(raw_ts, raw_pos, raw_vel_plot, dirty_acc, processed_data, valid_segments, valid_mask)
+        
+        return processed_data, valid_segments
 
-    def process_torque_data(self):
+    def process_torque_data(self, raw_data, processed_data, valid_segments):
         """Process torque data using the same segments and filters."""
-        if not hasattr(self, 'valid_segments') or self.valid_segments is None:
-            raise ValueError("Run filter_kinematics_data first.")
-            
-        if self.raw_data.get("torques") is None:
-            print("No torque data found.")
-            return None
 
-        raw_torques = np.array(self.raw_data["torques"])
+        raw_torques = np.array(raw_data["torques"])
         # Get delta for consistency
-        raw_ts = np.array(self.raw_data["timestamps"]).flatten()
+        raw_ts = np.array(raw_data["timestamps"]).flatten()
         dts = np.diff(raw_ts)
         median_dt = np.median(dts) if len(dts) > 0 else 0.001
         raw_torques = self._apply_filters(raw_torques, delta=median_dt, deriv=0, **self.latest_filter_config['filter_params'])
 
         torque_chunks = []
 
-        for seg in self.valid_segments:
+        for seg in valid_segments:
             seg_tau = raw_torques[seg]
             torque_chunks.append(seg_tau)
 
         if torque_chunks:
-            self.processed_data["torques"] = np.vstack(torque_chunks)
-            self._plot_single_signal("torques", raw_torques, self.processed_data["torques"])
-            return self.processed_data["torques"]
+            processed_data["torques"] = np.vstack(torque_chunks)
+            self._plot_single_signal(raw_data, valid_segments, "torques", raw_torques, processed_data["torques"])
+
+            return processed_data["torques"]
         return np.array([])
 
-    # --- HELPER METHODS ---
     def _get_valid_mask_from_accel(self, acc, sensitivity=50.0, dilation=10):
         """Detects spikes using MAD and dilates by `dilation` frames."""
         if acc.ndim > 1:
@@ -225,15 +291,15 @@ class H1v2Identification(BaseIdentification):
             slices.append(slice(start, end))
         return slices
 
-    def _plot_segmentation_results(self, raw_ts, r_pos, r_vel, r_acc, mask):
+    def _plot_segmentation_results(self, raw_ts, r_pos, r_vel, r_acc, processed_data, valid_segments, mask):
         """Plots Raw (Blue) vs Filtered (Green) ON THE SAME TIMESTEPS."""
         import matplotlib.pyplot as plt
         raw_ts = raw_ts.flatten()
 
         signals = {
-            "Positions": (r_pos, self.processed_data["positions"]),
-            "Velocities": (r_vel, self.processed_data["velocities"]),
-            "Accelerations": (r_acc, self.processed_data["accelerations"])
+            "Positions": (r_pos, processed_data["positions"]),
+            "Velocities": (r_vel, processed_data["velocities"]),
+            "Accelerations": (r_acc, processed_data["accelerations"])
         }
         
         bad_segments = self._get_segment_slices(~mask)
@@ -261,7 +327,7 @@ class H1v2Identification(BaseIdentification):
 
                 # 3. Processed (Segment by Segment on original time)
                 current_idx = 0
-                for i_seg, seg in enumerate(self.valid_segments):
+                for i_seg, seg in enumerate(valid_segments):
                     seg_len = seg.stop - seg.start
                     clean_chunk = clean_stacked[current_idx : current_idx + seg_len, j]
                     time_chunk = raw_ts[seg]
@@ -278,16 +344,16 @@ class H1v2Identification(BaseIdentification):
             plt.tight_layout()
             plt.show()
 
-    def _plot_single_signal(self, name, raw, clean_stacked):
+    def _plot_single_signal(self, raw_data, valid_segments, name, raw, clean_stacked):
         """Helper for Torque plotting."""
         import matplotlib.pyplot as plt
         if raw.ndim == 1: raw = raw[:, np.newaxis]
         n_joints = raw.shape[1]
         
-        raw_ts = np.array(self.raw_data["timestamps"]).flatten()
+        raw_ts = np.array(raw_data["timestamps"]).flatten()
         
         mask = np.zeros(len(raw), dtype=bool)
-        for seg in self.valid_segments:
+        for seg in valid_segments:
             mask[seg] = True
         bad_segments = self._get_segment_slices(~mask)
 
@@ -306,7 +372,7 @@ class H1v2Identification(BaseIdentification):
                 ax.axvspan(t_start, t_end, color='red', alpha=0.2)
                 
             current_idx = 0
-            for i_seg, seg in enumerate(self.valid_segments):
+            for i_seg, seg in enumerate(valid_segments):
                 seg_len = seg.stop - seg.start
                 clean_chunk = clean_stacked[current_idx : current_idx + seg_len, j]
                 time_chunk = raw_ts[seg]
@@ -319,252 +385,273 @@ class H1v2Identification(BaseIdentification):
         axes[-1].set_xlabel('Time (s)')
         plt.tight_layout()
         plt.show()
-    
-    def plot_results(self):
-        """
-        Plots measured vs identified vs nominal torques and their respective errors.
-        """
-        try:
-            raw_torques = self.raw_data["torques"]
-            n_joints = raw_torques.shape[1]
-        except (KeyError, AttributeError, IndexError):
-            n_joints = 7
-            print(f"Warning: Could not determine n_joints from raw_data. Defaulting to {n_joints}.")
 
-        tau_measured = self.result.get("torque processed", np.array([]))
-        tau_identified = self.result.get("torque estimated", np.array([]))
+    def _eliminate_zero_columns(self, dynamic_regressor, standard_parameter, zero_tolerance):
+        """Eliminate columns with near-zero values from regressor matrix.
         
-        if len(tau_measured) == 0 or len(tau_identified) == 0:
-            print("No torque data available for plotting")
-            return
-        
-        # --- Reconstruct nominal torques ---
-        # We calculate this first to ensure dimensions match before reshaping
-        tau_nominal = np.zeros((self.processed_data["positions"].shape))
-        for i in range(tau_nominal.shape[0]):
-            tau_nominal[i] = pin.rnea(self.model, 
-                                            self.data, 
-                                            self.processed_data["positions"][i], 
-                                            self.processed_data["velocities"][i], 
-                                            self.processed_data["accelerations"][i]
-                                        )
-        tau_nominal = tau_nominal[:, self.identif_config["act_idxq"]]
-        
-        # --- Reshape Data ---
-        if tau_measured.ndim == 1:
-            tau_measured = tau_measured.reshape(-1, n_joints, order='F')
-        if tau_identified.ndim == 1:
-            tau_identified = tau_identified.reshape(-1, n_joints, order='F')
-
-        # Ensure shapes match across all three signals
-        n_samples = min(len(tau_measured), len(tau_identified), len(tau_nominal))
-        tau_measured = tau_measured[:n_samples]
-        tau_identified = tau_identified[:n_samples]
-        tau_nominal = tau_nominal[:n_samples]
-        
-        # --- Setup Plot ---
-        fig, axes = plt.subplots(n_joints, 2, figsize=(14, 3 * n_joints), sharex='col')
-        
-        if n_joints == 1:
-            axes = axes.reshape(1, -1)
-
-        time_axis = np.arange(n_samples)
-
-        # --- Loop over joints ---
-        for j in range(n_joints):
-            # 1. Calculate Errors
-            error_ident = tau_measured[:, j] - tau_identified[:, j]
-            error_nom = tau_measured[:, j] - tau_nominal[:, j]
-
-            # 2. Calculate RMSEs
-            rmse_ident = np.sqrt(np.mean(error_ident**2))
-            rmse_nom = np.sqrt(np.mean(error_nom**2))
-
-            # --- Left Column: Signal Comparison ---
-            ax_comp = axes[j, 0]
-            ax_comp.plot(time_axis, tau_measured[:, j], label="Measured", color='#1f77b4', alpha=0.6)
-            ax_comp.plot(time_axis, tau_identified[:, j], label="Identified", color='#ff7f0e', alpha=0.8, linestyle='--')
-            ax_comp.plot(time_axis, tau_nominal[:, j], label="Nominal", color="#04d832", alpha=0.5, linestyle='--')
-            
-            ax_comp.set_ylabel(f'Joint {j+1}\nTorque (Nm)', fontweight='bold')
-            
-            # Enhanced Text Box with both RMSEs
-            stats_text = (f"RMSE Ident: {rmse_ident:.4f}\n"
-                        f"RMSE Nom:   {rmse_nom:.4f}")
-            ax_comp.text(0.02, 0.95, stats_text, transform=ax_comp.transAxes, 
-                            bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray', boxstyle='round'), 
-                            verticalalignment='top', fontfamily='monospace', fontsize=9)
-            
-            ax_comp.grid(True, alpha=0.3)
-            
-            if j == 0:
-                ax_comp.set_title("Torque Tracking (Measured vs Models)")
-                ax_comp.legend(loc='upper right', framealpha=0.9)
-
-            # --- Right Column: Error Comparison ---
-            ax_err = axes[j, 1]
-            
-            # Plot Nominal Error first (background, typically larger)
-            ax_err.plot(time_axis, error_nom, label="Meas - Nom", color='#04d832', alpha=0.4)
-            # Plot Identified Error second (foreground, typically smaller)
-            ax_err.plot(time_axis, error_ident, label="Meas - Ident", color='#d62728', alpha=0.8)
-            
-            ax_err.axhline(0, color='k', linewidth=0.8, alpha=0.5) 
-            ax_err.set_ylabel('Error (Nm)')
-            ax_err.grid(True, alpha=0.3)
-            
-            if j == 0:
-                ax_err.set_title("Residual Errors")
-                ax_err.legend(loc='upper right')
-
-            # X-labels only on bottom
-            if j == n_joints - 1:
-                ax_comp.set_xlabel('Sample')
-                ax_err.set_xlabel('Sample')
-
-        plt.suptitle(f'{self.__class__.__name__} Results Analysis', fontsize=16)
-        plt.tight_layout(rect=[0, 0.03, 1, 0.97]) 
-        plt.show()
-        
-    def solve_with_custom_solver(
-        self, method='lstsq', regularization=None, alpha=0.0,
-        constraints=None, decimate=False,
-        decimation_factor=1, zero_tolerance=0.001,
-        plotting=False, save_results=False, **solver_kwargs
-    ):
-        """
-        Alternative solving method using advanced linear solver.
-
-        This method provides more flexibility than the default QR-based
-        solve(), offering multiple solving methods, regularization, and
-        constraints.
-
         Args:
-            method (str): Solving method ('lstsq', 'ridge', 'lasso',
-                'constrained', etc.)
-            regularization (str): Regularization type ('l1', 'l2',
-                'elastic_net')
-            alpha (float): Regularization strength
-            constraints (dict): Linear constraints
-            decimate (bool): Whether to apply decimation
-            decimation_factor (int): Decimation factor if decimate=True
-            zero_tolerance (float): Tolerance for eliminating zero columns
-            plotting (bool): Whether to generate plots
-            save_results (bool): Whether to save parameters to file
-            **solver_kwargs: Additional arguments for LinearSolver
-
+            zero_tolerance (float): Tolerance for considering columns as zero
+            
         Returns:
-            ndarray: Identified base parameters
+            tuple: (regressor_reduced, active_parameters)
         """
-        print(f"Starting {self.__class__.__name__} identification "
-              f"with custom solver...")
-
-        # Validate prerequisites
-        self._validate_prerequisites()
-
-        # Step 1: Eliminate zero columns
-        regressor_reduced, active_params = self._eliminate_zero_columns(
-            zero_tolerance
-        )
-
-        # Step 2: Apply decimation if requested
-        if decimate:
-            tau_processed, W_processed = self._apply_decimation(
-                regressor_reduced, decimation_factor
-            )
-        else:
-            tau_processed, W_processed = self._prepare_undecimated_data(
-                regressor_reduced
-            )
+        idx_eliminated, active_parameters = get_index_eliminate(dynamic_regressor, standard_parameter, tol_e=zero_tolerance)
+        regressor_reduced = build_regressor_reduced(dynamic_regressor, idx_eliminated)
+        return regressor_reduced, active_parameters, idx_eliminated
+    
+    def _apply_decimation(self, processed_data, num_samples, regressor_reduced, decimation_factor):
+        """Apply signal decimation to reduce data size.
         
+        Args:
+            regressor_reduced (ndarray): Reduced regressor matrix
+            decimation_factor (int): Factor for decimation
+            
+        Returns:
+            tuple: (tau_decimated, regressor_decimated)
+        """
+        from scipy import signal
+
+        # Decimate torque data
+        tau_decimated_list = []
+        num_joints = len(self.identif_config["act_idxv"])
+
+        for i in range(num_joints):
+            tau_joint = processed_data["torques"][:, i]
+            tau_dec = signal.decimate(tau_joint, q=decimation_factor,
+                                      zero_phase=True)
+            tau_decimated_list.append(tau_dec)
+
+        # Concatenate decimated torque data
+        tau_decimated = tau_decimated_list[0]
+        for i in range(1, len(tau_decimated_list)):
+            tau_decimated = np.append(tau_decimated, tau_decimated_list[i])
+
+        # Decimate regressor matrix
+        regressor_decimated = self._decimate_regressor_matrix(
+            num_samples, regressor_reduced, decimation_factor)
+
+        # Validate that decimated data is properly aligned
+        if tau_decimated.shape[0] != regressor_decimated.shape[0]:
+            raise ValueError(
+                f"Decimated data size mismatch: "
+                f"tau_decimated has {tau_decimated.shape[0]} samples, "
+                f"regressor_decimated has {regressor_decimated.shape[0]} rows"
+            )
+
+        tau_decimated = tau_decimated
+        regressor_decimated = regressor_decimated
+        return tau_decimated, regressor_decimated
+
+    def _decimate_regressor_matrix(self, num_samples, regressor_reduced, decimation_factor):
+        """Decimate the regressor matrix by joints.
+        
+        Args:
+            regressor_reduced (ndarray): Reduced regressor matrix
+            decimation_factor (int): Decimation factor
+            
+        Returns:
+            ndarray: Decimated regressor matrix
+        """
+        from scipy import signal
+
+        num_joints = len(self.identif_config["act_idxv"])
+        regressor_list = []
+
+        for i in range(num_joints):
+            # Extract rows corresponding to joint i
+            start_idx = self.identif_config["act_idxv"][i] * num_samples
+            end_idx = (self.identif_config["act_idxv"][i] + 1) * num_samples
+
+            joint_regressor_decimated = []
+            for j in range(regressor_reduced.shape[1]):
+                column_data = regressor_reduced[start_idx:end_idx, j]
+                decimated_column = signal.decimate(
+                    column_data, q=decimation_factor, zero_phase=True)
+                joint_regressor_decimated.append(decimated_column)
+
+            # Reconstruct matrix for this joint
+            joint_matrix = np.zeros((len(joint_regressor_decimated[0]),
+                                     len(joint_regressor_decimated)))
+            for k, column in enumerate(joint_regressor_decimated):
+                joint_matrix[:, k] = column
+            regressor_list.append(joint_matrix)
+
+        # Concatenate all joint matrices
+        total_rows = sum(matrix.shape[0] for matrix in regressor_list)
+        regressor_decimated = np.zeros((total_rows,
+                                        regressor_list[0].shape[1]))
+
+        current_row = 0
+        for matrix in regressor_list:
+            next_row = current_row + matrix.shape[0]
+            regressor_decimated[current_row:next_row, :] = matrix
+            current_row = next_row
+
+        return regressor_decimated
+
+    def _calculate_base_parameters(self, standard_parameter, tau_processed, regressor_processed,
+                                   active_parameters):
+        """Calculate base parameters using QR decomposition.
+        
+        Args:
+            tau_processed (ndarray): Processed torque data
+            regressor_processed (ndarray): Processed regressor matrix
+            active_parameters (dict): Active parameter dictionary
+            
+        Returns:
+            dict: Results from QR decomposition
+        """
         from figaroh.tools.qrdecomposition import double_QR
 
-        W_base, _, base_parameters, _, phi_std = \
-            double_QR(
-                tau_processed, W_processed, active_params,
-                self.standard_parameter
-            )
+        # Perform QR decomposition
+        W_base, base_param_dict, base_parameters, phi_base, phi_std = \
+            double_QR(tau_processed, regressor_processed, active_parameters,
+                      standard_parameter)
 
-        # Step 3: Solve using custom solver
-        solver = LinearSolver(
-            method=method,
-            regularization=regularization,
-            alpha=alpha,
-            constraints=constraints,
-            bounds=self._get_bounds(base_parameters),
-            verbose=True,
-            **solver_kwargs
-        )
+        # Calculate torque estimation (avoid redundant computation)
+        tau_estimated = np.dot(W_base, phi_base)
 
-        # Step 4: Compute base parameters using QR decomposition
-        phi_base = solver.solve(W_base, tau_processed)
-        base_param_dict = {param: phi_base[i] for i, param in enumerate(base_parameters)}
-        
-        # Store results
-        self.dynamic_regressor_base = W_base
-        self.phi_base = phi_base
-        self.params_base = list(base_param_dict.keys())
-        self.tau_identif = W_base @ phi_base
-        self.tau_noised = tau_processed
-
-        # Step 5: Compute quality metrics and store
-        self._compute_quality_metrics()
-
-        results = {
+        return {
             "base_regressor": W_base,
             "base_param_dict": base_param_dict,
             "base_parameters": base_parameters,
             "phi_base": phi_base,
-            "tau_estimated": self.tau_identif,
+            "tau_estimated": tau_estimated,
             "tau_processed": tau_processed,
-            "solver_info": solver.solver_info,
-            "solver_method": method,
-            "regularization": regularization,
-            "alpha": alpha
         }
-
-        self._store_results(results)
-
-        # Step 6: Optional plotting
-        if plotting:
-            self.plot_results()
-
-        # Step 7: Optional parameter saving
-        if save_results:
-            self.save_results()
-
-        print(f"  RMSE: {self.rms_error:.6f}")
-        print(f"  Correlation: {self.correlation:.6f}")
-
-        return self.phi_base
-    
-    def _get_bounds(self, variable_list: list[str]) -> list[tuple]:
-        """
-        Dynamically determines optimization bounds based on the Leading Term 
-        and the algebraic structure of the Base Parameter linear combination.
         
-        P_BOUND (0, +inf): Principal Inertias (Ixx, Iyy, Izz, Ia), Friction (fv, fs), Mass (m).
-        N_BOUND (-inf, +inf): Static Moments (mx, my, mz), Products of Inertia (Ixy...), 
-                            Offsets, and DIFFERENCES of Principal Inertias (e.g. Ixx - Iyy).
-        """
-        unbounded_prefixes = ('mx', 'my', 'mz', 'off', 'Ixy', 'Ixz', 'Iyz')
-    
-        subtracted_inertia_pattern = re.compile(r'-\s*(?:[\d\.]+(?:e[+-]?\d+)?\*)?I[xyz]{2}')
+    def solve_global(self, zero_tolerance=1e-6, plotting=True, save_results=False):
+        print(f"\n[Global ID] Starting WTLS Identification (Reference Function)...")
+        
+        # --- 1. Structural Analysis (Random Data) ---
+        q_rand = np.random.uniform(low=-6, high=6, size=(self.num_samples_A, self.model.nq))
+        dq_rand = np.random.uniform(low=-6, high=6, size=(self.num_samples_A, self.model.nv))
+        ddq_rand = np.random.uniform(low=-6, high=6, size=(self.num_samples_A, self.model.nv))
+        
+        W_rand = build_regressor_basic(self.robot, q_rand, dq_rand, ddq_rand, self.identif_config)
+        params_standard = get_standard_parameters(self.model, self.identif_config)
+        idx_e, params_r = get_index_eliminate(W_rand, params_standard, tol_e=zero_tolerance)
+        W_e = build_regressor_reduced(W_rand, idx_e)
+        _, params_base, idx_base = get_baseParams(W_e, params_r, params_standard)
+        
+        # --- 2. Experiment A (Unloaded) ---
+        W_A = build_regressor_basic(
+            self.robot, 
+            self.processed_data_A["positions"], 
+            self.processed_data_A["velocities"], 
+            self.processed_data_A["accelerations"], 
+            self.identif_config
+        )
+        W_e_A = build_regressor_reduced(W_A, idx_e)
+        W_base_A = W_e_A[:, idx_base]
+        
+        # --- 3. Experiment B (Loaded) ---
+        W_B_full = build_regressor_basic(
+            self.robot, 
+            self.processed_data_B["positions"], 
+            self.processed_data_B["velocities"], 
+            self.processed_data_B["accelerations"], 
+            self.identif_config
+        )
+        W_e_B = build_regressor_reduced(W_B_full, idx_e)
+        W_base_B = W_e_B[:, idx_base]
 
-        dynamic_bounds = []
+        # --- 4. Prepare Torque Data ---
+        # Stacking: [Joint0_all_times, Joint1_all_times...]
+        tau_A_flat = self.processed_data_A["torques"].flatten(order='F')
+        tau_B_flat = self.processed_data_B["torques"].flatten(order='F')
 
-        for var_string in variable_list:
-            leading_term = var_string.split()[0]
-            bound_type = self.P_BOUND
+        # --- 5. Solve ---
+        W_tot, V_norm, residue = build_total_regressor_current(
+            W_base_A, 
+            W_base_B, 
+            W_B_full, 
+            tau_A_flat, 
+            tau_B_flat, 
+            params_standard, 
+            self.identif_config
+        )
+        
+        nb_joints = len(self.identif_config["act_idxv"])
+        n_base_params = W_base_A.shape[1]
+        gains = V_norm[n_base_params : n_base_params + nb_joints]
+        
+        # --- 6. PLOTTING VALIDATION (CORRECTED) ---
+        if plotting:
+            import matplotlib.pyplot as plt
             
-            # --- Check 1: Is the leading term inherently unbounded? ---
-            if leading_term.startswith(unbounded_prefixes):
-                bound_type = self.N_BOUND
+            print(f"Scaling Factor (Should be ~1.0): {V_norm[-1]:.4f}")
+            print(f"Gains: {gains}")
             
-            # --- Check 2: Special Case - Difference of Principal Inertias ---
-                if subtracted_inertia_pattern.search(var_string):
-                    bound_type = self.N_BOUND
-                            
-            dynamic_bounds.append(bound_type)
+            # === PLOT 1: EXPERIMENT A (ROBOT ONLY) ===
+            print("\n[Validation] Plotting Experiment A (Unloaded Robot Only)...")
+            
+            n_samples_A = len(tau_A_flat) // nb_joints
+            
+            # FIX: Reshape to (Samples, Joints) directly. 
+            # order='F' fills the first column (Joint 0) with the first N samples.
+            tau_meas_mat_A = tau_A_flat.reshape((n_samples_A, nb_joints), order='F')
+            
+            tau_corrected_A = tau_meas_mat_A * gains
 
-        return dynamic_bounds
+            phi_base_identified = V_norm[:n_base_params]
+            tau_model_A_flat = W_base_A @ phi_base_identified
+            
+            # FIX: Same Reshape logic for Model
+            tau_model_A = tau_model_A_flat.reshape((n_samples_A, nb_joints), order='F')
+            
+            figA, axsA = plt.subplots(nb_joints, 1, figsize=(10, 3 * nb_joints), sharex=True)
+            if nb_joints == 1: axsA = [axsA]
+            figA.suptitle(f'Validation A: UNLOADED (Base Params)', fontsize=16)
+
+            for j in range(nb_joints):
+                joint_name = self.identif_config["active_joints"][j] if "active_joints" in self.identif_config else f"Joint {j}"
+                ax = axsA[j]
+                ax.plot(tau_corrected_A[:, j], label='Measured (x Gain)', color='blue', alpha=0.6)
+                ax.plot(tau_model_A[:, j], label='Identified Model', color='green', linestyle='--')
+                ax.set_ylabel(f'{joint_name}\n(Nm)')
+                ax.grid(True, alpha=0.3)
+                if j == 0: ax.legend(loc='upper right')
+            
+            axsA[-1].set_xlabel('Samples')
+            plt.tight_layout()
+            plt.show()
+
+            # === PLOT 2: EXPERIMENT B (LOADED) ===
+            print("\n[Validation] Plotting Experiment B (Loaded)...")
+            
+            n_samples_B = len(tau_B_flat) // nb_joints
+            
+            # FIX: Reshape to (Samples, Joints) directly
+            tau_meas_mat_B = tau_B_flat.reshape((n_samples_B, nb_joints), order='F')
+            tau_corrected_B = tau_meas_mat_B * gains
+            
+            # Residue slicing
+            start_row_B = len(tau_A_flat)
+            residue_B = residue[start_row_B:]
+            
+            # FIX: Reshape Residue (Samples, Joints) directly
+            residue_mat = residue_B.reshape((n_samples_B, nb_joints), order='F')
+            
+            # Model = Measured*Gain - Residue
+            tau_model_B = tau_corrected_B - residue_mat
+
+            figB, axsB = plt.subplots(nb_joints, 1, figsize=(10, 3 * nb_joints), sharex=True)
+            if nb_joints == 1: axsB = [axsB]
+            figB.suptitle(f'Validation B: LOADED (Payload)', fontsize=16)
+
+            for j in range(nb_joints):
+                joint_name = self.identif_config["active_joints"][j] if "active_joints" in self.identif_config else f"Joint {j}"
+                ax = axsB[j]
+                ax.plot(tau_corrected_B[:, j], label='Measured (x Gain)', color='blue', alpha=0.6)
+                ax.plot(tau_model_B[:, j], label='Identified Model', color='red', linestyle='--')
+                ax.set_title(f"Joint {j}: Gain = {gains[j]:.4f}")
+                ax.set_ylabel(f'{joint_name}\n(Nm)')
+                ax.grid(True, alpha=0.3)
+                if j == 0: ax.legend(loc='upper right')
+
+            axsB[-1].set_xlabel('Samples')
+            plt.tight_layout()
+            plt.show()
+
+        return gains
