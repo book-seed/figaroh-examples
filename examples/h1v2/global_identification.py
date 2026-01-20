@@ -35,12 +35,14 @@ def main():
 
     # Create identification object
     h1v2_iden = H1v2Identification(h1v2, "config/h1v2_config.yaml")
-    h1v2_iden.filter_config = {'differentiation_method': 'gradient', 'filter_params': {'window_length': 301, 'polyorder': 3, 'mode': 'nearest'}} 
+    h1v2_iden.filter_config = {'differentiation_method': 'gradient', 'filter_params': {'window_length': 100, 'polyorder': 3, 'mode': 'nearest'}} 
 
     # Define additional parameters excluded from yaml files
     ps = h1v2_iden.identif_config
-
+    
     ps["active_joints"] = ['left_shoulder_pitch_joint', 'left_shoulder_roll_joint', 'left_shoulder_yaw_joint', 'left_elbow_joint', 'left_wrist_roll_joint', 'left_wrist_pitch_joint', 'left_wrist_yaw_joint']
+    # ps["untrustworthy_joints"] = ['left_wrist_roll_joint', 'left_wrist_pitch_joint', 'left_wrist_yaw_joint']
+    ps["untrustworthy_joints"] = ['left_wrist_yaw_joint']
 
     # Joint parameters
     ps["act_Jid"] = [h1v2_iden.model.getJointId(i) for i in ps["active_joints"]]
@@ -50,9 +52,9 @@ def main():
 
     # Dataset paths
     data_pathes_A = {}
-    data_pathes_A["pos_data"] = "data/identification//exp_A/h1_position.csv"
-    data_pathes_A["vel_data"] = "data/identification//exp_A/h1_velocity.csv"
-    data_pathes_A["torque_data"] = "data/identification//exp_A/h1_effort.csv"
+    data_pathes_A["pos_data"] = "data/identification/exp_A/h1_position.csv"
+    data_pathes_A["vel_data"] = "data/identification/exp_A/h1_velocity.csv"
+    data_pathes_A["torque_data"] = "data/identification/exp_A/h1_effort.csv"
     
     data_pathes_B = {}
     data_pathes_B["pos_data"] = "data/identification/exp_B/h1_position.csv"

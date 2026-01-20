@@ -519,17 +519,49 @@ class H1v2Identification(BaseIdentification):
             "tau_estimated": tau_estimated,
             "tau_processed": tau_processed,
         }
-        
+    
     def solve_global(self, zero_tolerance=1e-6, plotting=True, save_results=False):
         print(f"\n[Global ID] Starting WTLS Identification (Reference Function)...")
         
         # --- 1. Structural Analysis (Random Data) ---
+        keep_joint_indices = [i for i, name in enumerate(self.identif_config["active_joints"]) if name not in self.identif_config["untrustworthy_joints"]]
+        nb_joints_partial = len(keep_joint_indices)
+        
+        gains = np.arange(1, nb_joints_partial + 1)
+        
+        def filter_blocks(data_matrix, num_samples):
+            """
+            Extracts only the blocks of rows corresponding to trusted joints.
+            Assumes input is stacked: [Joint0_all_samples; Joint1_all_samples; ...]
+            """
+            is_vector = (data_matrix.ndim == 1)
+            
+            blocks_to_keep = []
+            for j_idx in keep_joint_indices:
+                # Calculate start/end row for this joint block
+                start = j_idx * num_samples
+                end   = (j_idx + 1) * num_samples
+                
+                # Slice
+                if is_vector:
+                    blocks_to_keep.append(data_matrix[start:end])
+                else:
+                    blocks_to_keep.append(data_matrix[start:end, :])
+            
+            # Stack them back together
+            if is_vector:
+                return np.hstack(blocks_to_keep)
+            else:
+                return np.vstack(blocks_to_keep)
+        
         q_rand = np.random.uniform(low=-6, high=6, size=(self.num_samples_A, self.model.nq))
         dq_rand = np.random.uniform(low=-6, high=6, size=(self.num_samples_A, self.model.nv))
         ddq_rand = np.random.uniform(low=-6, high=6, size=(self.num_samples_A, self.model.nv))
         
         W_rand = build_regressor_basic(self.robot, q_rand, dq_rand, ddq_rand, self.identif_config)
+        W_rand = filter_blocks(W_rand, self.num_samples_A)
         params_standard = get_standard_parameters(self.model, self.identif_config)
+            
         idx_e, params_r = get_index_eliminate(W_rand, params_standard, tol_e=zero_tolerance)
         W_e = build_regressor_reduced(W_rand, idx_e)
         _, params_base, idx_base = get_baseParams(W_e, params_r, params_standard)
@@ -542,39 +574,78 @@ class H1v2Identification(BaseIdentification):
             self.processed_data_A["accelerations"], 
             self.identif_config
         )
+        W_A = filter_blocks(W_A, self.num_samples_A)
         W_e_A = build_regressor_reduced(W_A, idx_e)
         W_base_A = W_e_A[:, idx_base]
-        
+        cond_num = np.linalg.cond(W_base_A)
+        print(f"Condition Number = {cond_num:.2e}")
+
         # --- 3. Experiment B (Loaded) ---
-        W_B_full = build_regressor_basic(
+        W_B = build_regressor_basic(
             self.robot, 
             self.processed_data_B["positions"], 
             self.processed_data_B["velocities"], 
             self.processed_data_B["accelerations"], 
             self.identif_config
         )
-        W_e_B = build_regressor_reduced(W_B_full, idx_e)
+        W_B = filter_blocks(W_B, self.num_samples_B)
+        W_e_B = build_regressor_reduced(W_B, idx_e)
         W_base_B = W_e_B[:, idx_base]
+        
+        # --- 3. GENERATE SYNTHETIC TORQUE ---
+        print("  -> Constructing Theoretical Parameter Vector...")
+        phi_standard_list = []
 
-        # --- 4. Prepare Torque Data ---
-        # Stacking: [Joint0_all_times, Joint1_all_times...]
-        tau_A_flat = self.processed_data_A["torques"].flatten(order='F')
-        tau_B_flat = self.processed_data_B["torques"].flatten(order='F')
+        for i in range(1, self.model.njoints): 
+            phi_i = self.model.inertias[i].toDynamicParameters()
+            phi_standard_list.extend(phi_i)
+            
+            if self.identif_config.get("has_friction", False):
+                phi_standard_list.extend([0.1, 0.1]) # fv=0.1, fs=0.1 (Fake Friction)
+            if self.identif_config.get("has_actuator_inertia", False):
+                phi_standard_list.append(0.01)       # ia (Fake Inertia)
+            if self.identif_config.get("has_joint_offset", False):
+                phi_standard_list.append(0.0)        # offset
+
+        phi_standard = np.array(phi_standard_list)
+            
+        tau_A_synthetic = W_A @ phi_standard
+        
+        simulated_mass = self.identif_config["mass_load"]       
+        cols_per_joint = 10 
+        if self.identif_config.get("has_friction", False): cols_per_joint += 2
+        if self.identif_config.get("has_actuator_inertia", False): cols_per_joint += 1
+        if self.identif_config.get("has_joint_offset", False): cols_per_joint += 1
+        
+        idx_body = self.identif_config["which_body_loaded"] - 1
+        mass_col_idx_relative = 9 
+        mass_col_idx = (idx_body * cols_per_joint) + mass_col_idx_relative
+        tau_payload = W_B[:, mass_col_idx] * simulated_mass
+        
+        tau_B_synthetic = (W_B @ phi_standard) + tau_payload
+                
+        # Flatten
+        tau_A_flat = (tau_A_synthetic.reshape(nb_joints_partial, self.num_samples_A).T / gains).T.flatten()
+        tau_B_flat = (tau_B_synthetic.reshape(nb_joints_partial, self.num_samples_B).T / gains).T.flatten()
+        
+        tau_A_flat = self.processed_data_A["torques"].T.flatten()
+        tau_B_flat = self.processed_data_B["torques"].T.flatten()  
+        tau_A_flat = filter_blocks(tau_A_flat, self.num_samples_A)
+        tau_B_flat = filter_blocks(tau_B_flat, self.num_samples_B)
 
         # --- 5. Solve ---
         W_tot, V_norm, residue = build_total_regressor_current(
             W_base_A, 
             W_base_B, 
-            W_B_full, 
+            W_B, 
             tau_A_flat, 
             tau_B_flat, 
             params_standard, 
             self.identif_config
         )
         
-        nb_joints = len(self.identif_config["act_idxv"])
         n_base_params = W_base_A.shape[1]
-        gains = V_norm[n_base_params : n_base_params + nb_joints]
+        gains = V_norm[n_base_params : n_base_params + nb_joints_partial]
         
         # --- 6. PLOTTING VALIDATION (CORRECTED) ---
         if plotting:
@@ -586,11 +657,11 @@ class H1v2Identification(BaseIdentification):
             # === PLOT 1: EXPERIMENT A (ROBOT ONLY) ===
             print("\n[Validation] Plotting Experiment A (Unloaded Robot Only)...")
             
-            n_samples_A = len(tau_A_flat) // nb_joints
+            n_samples_A = len(tau_A_flat) // nb_joints_partial
             
             # FIX: Reshape to (Samples, Joints) directly. 
             # order='F' fills the first column (Joint 0) with the first N samples.
-            tau_meas_mat_A = tau_A_flat.reshape((n_samples_A, nb_joints), order='F')
+            tau_meas_mat_A = tau_A_flat.reshape((n_samples_A, nb_joints_partial), order='F')
             
             tau_corrected_A = tau_meas_mat_A * gains
 
@@ -598,13 +669,13 @@ class H1v2Identification(BaseIdentification):
             tau_model_A_flat = W_base_A @ phi_base_identified
             
             # FIX: Same Reshape logic for Model
-            tau_model_A = tau_model_A_flat.reshape((n_samples_A, nb_joints), order='F')
+            tau_model_A = tau_model_A_flat.reshape((n_samples_A, nb_joints_partial), order='F')
             
-            figA, axsA = plt.subplots(nb_joints, 1, figsize=(10, 3 * nb_joints), sharex=True)
-            if nb_joints == 1: axsA = [axsA]
+            figA, axsA = plt.subplots(nb_joints_partial, 1, figsize=(10, 3 * nb_joints_partial), sharex=True)
+            if nb_joints_partial == 1: axsA = [axsA]
             figA.suptitle(f'Validation A: UNLOADED (Base Params)', fontsize=16)
 
-            for j in range(nb_joints):
+            for j in range(nb_joints_partial):
                 joint_name = self.identif_config["active_joints"][j] if "active_joints" in self.identif_config else f"Joint {j}"
                 ax = axsA[j]
                 ax.plot(tau_corrected_A[:, j], label='Measured (x Gain)', color='blue', alpha=0.6)
@@ -620,10 +691,10 @@ class H1v2Identification(BaseIdentification):
             # === PLOT 2: EXPERIMENT B (LOADED) ===
             print("\n[Validation] Plotting Experiment B (Loaded)...")
             
-            n_samples_B = len(tau_B_flat) // nb_joints
+            n_samples_B = len(tau_B_flat) // nb_joints_partial
             
             # FIX: Reshape to (Samples, Joints) directly
-            tau_meas_mat_B = tau_B_flat.reshape((n_samples_B, nb_joints), order='F')
+            tau_meas_mat_B = tau_B_flat.reshape((n_samples_B, nb_joints_partial), order='F')
             tau_corrected_B = tau_meas_mat_B * gains
             
             # Residue slicing
@@ -631,16 +702,16 @@ class H1v2Identification(BaseIdentification):
             residue_B = residue[start_row_B:]
             
             # FIX: Reshape Residue (Samples, Joints) directly
-            residue_mat = residue_B.reshape((n_samples_B, nb_joints), order='F')
+            residue_mat = residue_B.reshape((n_samples_B, nb_joints_partial), order='F')
             
             # Model = Measured*Gain - Residue
             tau_model_B = tau_corrected_B - residue_mat
 
-            figB, axsB = plt.subplots(nb_joints, 1, figsize=(10, 3 * nb_joints), sharex=True)
-            if nb_joints == 1: axsB = [axsB]
+            figB, axsB = plt.subplots(nb_joints_partial, 1, figsize=(10, 3 * nb_joints_partial), sharex=True)
+            if nb_joints_partial == 1: axsB = [axsB]
             figB.suptitle(f'Validation B: LOADED (Payload)', fontsize=16)
 
-            for j in range(nb_joints):
+            for j in range(nb_joints_partial):
                 joint_name = self.identif_config["active_joints"][j] if "active_joints" in self.identif_config else f"Joint {j}"
                 ax = axsB[j]
                 ax.plot(tau_corrected_B[:, j], label='Measured (x Gain)', color='blue', alpha=0.6)
