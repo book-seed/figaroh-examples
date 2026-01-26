@@ -25,6 +25,8 @@ from figaroh.tools.regressor import (
 )
 from figaroh.tools.qrdecomposition import get_baseParams
 
+from scipy import signal
+
 class H1v2Identification(BaseIdentification):
     """H1v2-specific dynamic parameter identification class."""
     
@@ -49,15 +51,34 @@ class H1v2Identification(BaseIdentification):
         self.processed_data_B, self.num_samples_B = self.process_data(data_pathes=data_pathes_B, truncate=truncate_B)
         
     def process_data(self, data_pathes, truncate=None):
-        """Load and process data"""
         filter_config = self.filter_config
         raw_data = self.load_trajectory_data(data_pathes)
-        raw_data = self._truncate_data(raw_data, truncate)
+        
+        # 1. Compute Kinematics (Use SavGol only for differentiation)
+        # Important: Don't over-smooth here. Let the common filter do the smoothing later.
+        # Use a smaller window for differentiation (e.g., 21 or 31)
         processed_data, valid_segments = self.filter_kinematics_data(raw_data, filter_config)
-        processed_data["torques"] = self.process_torque_data(raw_data, processed_data, valid_segments)
+        
+        # 2. Get Raw Torques (Do NOT filter them with SavGol yet)
+        # Extract the raw torques corresponding to the valid segments
+        raw_torques_stacked = []
+        raw_tau = raw_data["torques"]
+        for seg in valid_segments:
+            raw_torques_stacked.append(raw_tau[seg])
+        processed_data["torques"] = np.vstack(raw_torques_stacked)
+        
+        # 3. APPLY COMMON FILTER (The Fix)
+        # Apply the EXACT SAME low-pass filter to ddq and tau
+        # Cutoff should be roughly 10-20% of Nyquist, or match your robot dynamics (e.g., 10Hz - 20Hz)
+        processed_data = self._apply_common_filter(processed_data, cutoff_hz=5.0, dt=0.002)
+
+        # 4. Truncate (if needed)
+        processed_data = self._truncate_data(processed_data, truncate)
+        
+        # 5. Build Full Config
         num_samples = processed_data["positions"].shape[0]
         processed_data = self._build_full_configuration(processed_data, num_samples)
-                
+        
         return processed_data, num_samples
 
     def calculate_full_regressor(self, model, processed_data, num_samples):
@@ -154,6 +175,33 @@ class H1v2Identification(BaseIdentification):
             "torques": tau
         }
 
+    def _apply_common_filter(self, data_dict, cutoff_hz=20.0, dt=0.002):
+        """
+        Applies identical Butterworth Low-Pass Filter to Acc and Tau.
+        This ensures bandwidth consistency for identification.
+        """
+        from scipy.signal import butter, filtfilt
+        
+        # Design Filter (e.g., 4th order Butterworth)
+        nyquist = 0.5 / dt
+        norm_cutoff = cutoff_hz / nyquist
+        b, a = butter(4, norm_cutoff, btype='low', analog=False)
+        
+        # Filter Acceleration (Rows = Samples)
+        # We assume data is already stacked/computed
+        if "accelerations" in data_dict and len(data_dict["accelerations"]) > 0:
+            data_dict["accelerations"] = filtfilt(b, a, data_dict["accelerations"], axis=0)
+            
+        # Filter Torques
+        if "torques" in data_dict and len(data_dict["torques"]) > 0:
+            data_dict["torques"] = filtfilt(b, a, data_dict["torques"], axis=0)
+            
+        # Optional: Filter Velocity too if used for Friction
+        if "velocities" in data_dict and len(data_dict["velocities"]) > 0:
+            data_dict["velocities"] = filtfilt(b, a, data_dict["velocities"], axis=0)
+            
+        return data_dict
+    
     def _apply_filters(self, data, delta=0.001, window_length=11, polyorder=11, deriv=0, **kwargs):
         """
         Applies a Savitzky-Golay filter with derivative support.
@@ -204,13 +252,13 @@ class H1v2Identification(BaseIdentification):
         
         # --- 2. DETECTION PASS ---
         dirty_acc = self._differentiate_signal(raw_ts, raw_vel, method=filter_config['differentiation_method'])
-        valid_mask = self._get_valid_mask_from_accel(dirty_acc, sensitivity=50.0, dilation=10)
+        valid_mask = self._get_valid_mask_from_accel(dirty_acc, sensitivity=100.0, dilation=10)
         valid_segments = self._get_segment_slices(valid_mask)
         
         # 3a. Smooth Position (deriv=0)
         filtered_pos = self._apply_filters(raw_pos, delta=median_dt, deriv=0, **filter_config['filter_params'])
-        filtered_vel = self._apply_filters(raw_pos, delta=median_dt, deriv=1, **filter_config['filter_params'])
-        filtered_acc = self._apply_filters(raw_pos, delta=median_dt, deriv=2, **filter_config['filter_params'])
+        filtered_vel = self._apply_filters(raw_vel, delta=median_dt, deriv=0, **filter_config['filter_params'])
+        filtered_acc = self._apply_filters(raw_vel, delta=median_dt, deriv=1, **filter_config['filter_params'])
         
         chunks = {"positions": [], "velocities": [], "accelerations": []}     
 
@@ -234,7 +282,7 @@ class H1v2Identification(BaseIdentification):
 
         # --- 5. PLOTTING ---
         raw_vel_plot = np.array(raw_data["velocities"]) if raw_data.get("velocities") is not None else raw_vel
-        # self._plot_segmentation_results(raw_ts, raw_pos, raw_vel_plot, dirty_acc, processed_data, valid_segments, valid_mask)
+        self._plot_segmentation_results(raw_ts, raw_pos, raw_vel_plot, dirty_acc, processed_data, valid_segments, valid_mask)
         
         return processed_data, valid_segments
 
@@ -519,7 +567,7 @@ class H1v2Identification(BaseIdentification):
             "tau_estimated": tau_estimated,
             "tau_processed": tau_processed,
         }
-    
+        
     def solve_global(self, zero_tolerance=1e-6, plotting=True, save_results=False):
         print(f"\n[Global ID] Starting WTLS Identification (Reference Function)...")
         
@@ -527,8 +575,37 @@ class H1v2Identification(BaseIdentification):
         keep_joint_indices = [i for i, name in enumerate(self.identif_config["active_joints"]) if name not in self.identif_config["untrustworthy_joints"]]
         nb_joints_partial = len(keep_joint_indices)
         
-        gains = np.arange(1, nb_joints_partial + 1)
-        
+        def extract_time_segments(data_dict, intervals_sec):
+            """
+            Keeps only data within specific time windows.
+            intervals_sec: list of tuples [(start_sec, end_sec), ...]
+            """
+            ts = data_dict["timestamps"].flatten()
+            dt = np.median(np.diff(ts)) if len(ts) > 1 else 0.001
+            
+            mask = np.zeros(len(ts), dtype=bool)
+            
+            for (t_start, t_end) in intervals_sec:
+                # Convert time to indices
+                idx_start = int(t_start / dt)
+                idx_end = int(t_end / dt)
+                # Clamp to bounds
+                idx_start = max(0, min(idx_start, len(ts)-1))
+                idx_end = max(0, min(idx_end, len(ts)))
+                mask[idx_start:idx_end] = True
+                
+            new_data = {}
+            for key in ["positions", "velocities", "accelerations"]:
+                if key in data_dict and data_dict[key] is not None:
+                    new_data[key] = data_dict[key][mask]
+            
+            # If torques exist (though we use synthetic later, we might plot real ones)
+            if "torques" in data_dict and data_dict[key] is not None:
+                 new_data["torques"] = data_dict["torques"][mask]
+
+            new_num_samples = np.sum(mask)
+            return new_data, new_num_samples
+                
         def filter_blocks(data_matrix, num_samples):
             """
             Extracts only the blocks of rows corresponding to trusted joints.
@@ -554,14 +631,25 @@ class H1v2Identification(BaseIdentification):
             else:
                 return np.vstack(blocks_to_keep)
         
+        # intervals_A = [(20, 36)]
+        # self.processed_data_A, self.num_samples_A = extract_time_segments(self.processed_data_A, intervals_A)
+        # intervals_B = [(15, 49)]
+        # self.processed_data_B, self.num_samples_B = extract_time_segments(self.processed_data_B, intervals_B)
+        
         q_rand = np.random.uniform(low=-6, high=6, size=(self.num_samples_A, self.model.nq))
         dq_rand = np.random.uniform(low=-6, high=6, size=(self.num_samples_A, self.model.nv))
         ddq_rand = np.random.uniform(low=-6, high=6, size=(self.num_samples_A, self.model.nv))
         
+        # for i in range(len(self.identif_config["active_joints"])):
+        #     if i not in keep_joint_indices:
+        #         q_rand[:, i] = 0
+        #         dq_rand[:, i] = 0
+        #         ddq_rand[:, i] = 0
+        
         W_rand = build_regressor_basic(self.robot, q_rand, dq_rand, ddq_rand, self.identif_config)
-        W_rand = filter_blocks(W_rand, self.num_samples_A)
+        # W_rand = filter_blocks(W_rand, self.num_samples_A)
         params_standard = get_standard_parameters(self.model, self.identif_config)
-            
+                    
         idx_e, params_r = get_index_eliminate(W_rand, params_standard, tol_e=zero_tolerance)
         W_e = build_regressor_reduced(W_rand, idx_e)
         _, params_base, idx_base = get_baseParams(W_e, params_r, params_standard)
@@ -574,7 +662,7 @@ class H1v2Identification(BaseIdentification):
             self.processed_data_A["accelerations"], 
             self.identif_config
         )
-        W_A = filter_blocks(W_A, self.num_samples_A)
+        # W_A = filter_blocks(W_A, self.num_samples_A)
         W_e_A = build_regressor_reduced(W_A, idx_e)
         W_base_A = W_e_A[:, idx_base]
         cond_num = np.linalg.cond(W_base_A)
@@ -588,7 +676,7 @@ class H1v2Identification(BaseIdentification):
             self.processed_data_B["accelerations"], 
             self.identif_config
         )
-        W_B = filter_blocks(W_B, self.num_samples_B)
+        # W_B = filter_blocks(W_B, self.num_samples_B)
         W_e_B = build_regressor_reduced(W_B, idx_e)
         W_base_B = W_e_B[:, idx_base]
         
@@ -601,7 +689,7 @@ class H1v2Identification(BaseIdentification):
             phi_standard_list.extend(phi_i)
             
             if self.identif_config.get("has_friction", False):
-                phi_standard_list.extend([0.1, 0.1]) # fv=0.1, fs=0.1 (Fake Friction)
+                phi_standard_list.extend([0.001, 0.1]) # fv=0.1, fs=0.1 (Fake Friction)
             if self.identif_config.get("has_actuator_inertia", False):
                 phi_standard_list.append(0.01)       # ia (Fake Inertia)
             if self.identif_config.get("has_joint_offset", False):
@@ -611,27 +699,55 @@ class H1v2Identification(BaseIdentification):
             
         tau_A_synthetic = W_A @ phi_standard
         
-        simulated_mass = self.identif_config["mass_load"]       
+        m_load = self.identif_config["mass_load"]       
+        # r_in  = 0.03/2
+        r_in  = 0.0
+        r_out = 0.126/2
+        h_th  = 0.015
+        p_com = np.array([0.228 + 0.0775, 0.0, 0.0])
+        
+        val_Ix = 0.5 * m_load * (r_in**2 + r_out**2)
+        val_Iy_Iz = (1.0/12.0) * m_load * (3*(r_in**2 + r_out**2) + h_th**2)    
+        I_load_at_com = np.diag([val_Ix, val_Iy_Iz, val_Iy_Iz])
+        p_norm_sq = np.dot(p_com, p_com)
+        p_outer   = np.outer(p_com, p_com)
+        I_load_at_origin = I_load_at_com + m_load * (p_norm_sq * np.eye(3) - p_outer)
+        h_load = m_load * p_com
+
+        delta_phi_load = np.array([
+                m_load,                # Mass
+                h_load[0], 
+                h_load[1], 
+                h_load[2],
+                I_load_at_origin[0,0], # Ixx
+                I_load_at_origin[0,1], # Ixy
+                I_load_at_origin[1,1], # Iyy
+                I_load_at_origin[0,2], # Ixz
+                I_load_at_origin[1,2], # Iyz
+                I_load_at_origin[2,2]  # Izz
+            ])
+        
         cols_per_joint = 10 
         if self.identif_config.get("has_friction", False): cols_per_joint += 2
         if self.identif_config.get("has_actuator_inertia", False): cols_per_joint += 1
         if self.identif_config.get("has_joint_offset", False): cols_per_joint += 1
         
         idx_body = self.identif_config["which_body_loaded"] - 1
-        mass_col_idx_relative = 9 
-        mass_col_idx = (idx_body * cols_per_joint) + mass_col_idx_relative
-        tau_payload = W_B[:, mass_col_idx] * simulated_mass
+        start_col = idx_body * cols_per_joint
+        W_payload_block = W_B[:, start_col : start_col + 10]
+        tau_payload = W_payload_block @ delta_phi_load
         
-        tau_B_synthetic = (W_B @ phi_standard) + tau_payload
-                
-        # Flatten
-        tau_A_flat = (tau_A_synthetic.reshape(nb_joints_partial, self.num_samples_A).T / gains).T.flatten()
-        tau_B_flat = (tau_B_synthetic.reshape(nb_joints_partial, self.num_samples_B).T / gains).T.flatten()
+        tau_B_synthetic = (W_B @ phi_standard) + tau_payload  
         
-        tau_A_flat = self.processed_data_A["torques"].T.flatten()
-        tau_B_flat = self.processed_data_B["torques"].T.flatten()  
-        tau_A_flat = filter_blocks(tau_A_flat, self.num_samples_A)
-        tau_B_flat = filter_blocks(tau_B_flat, self.num_samples_B)
+        # gains = np.arange(1, nb_joints_partial + 1)
+        gains = np.ones(nb_joints_partial)
+        tau_A_flat = (tau_A_synthetic.reshape(nb_joints_partial, self.num_samples_A).T / gains).T.flatten() # + 0.3*np.random.rand(*tau_A_synthetic.shape)
+        tau_B_flat = (tau_B_synthetic.reshape(nb_joints_partial, self.num_samples_B).T / gains).T.flatten() # + 0.3*np.random.rand(*tau_B_synthetic.shape)
+        
+        tau_A_flat = self.processed_data_A["torques"].flatten(order='F')  # comment to use pinocchio instead of mujoco for the torques and the TLS
+        tau_B_flat = self.processed_data_B["torques"].flatten(order='F')
+        # tau_A_flat = filter_blocks(tau_A_flat, self.num_samples_A)
+        # tau_B_flat = filter_blocks(tau_B_flat, self.num_samples_B)
 
         # --- 5. Solve ---
         W_tot, V_norm, residue = build_total_regressor_current(
@@ -646,6 +762,8 @@ class H1v2Identification(BaseIdentification):
         
         n_base_params = W_base_A.shape[1]
         gains = V_norm[n_base_params : n_base_params + nb_joints_partial]
+        
+        print("Unknown load params:", V_norm[n_base_params + nb_joints_partial:n_base_params + nb_joints_partial + 3] / self.identif_config["mass_load"])
         
         # --- 6. PLOTTING VALIDATION (CORRECTED) ---
         if plotting:
@@ -724,5 +842,158 @@ class H1v2Identification(BaseIdentification):
             axsB[-1].set_xlabel('Samples')
             plt.tight_layout()
             plt.show()
+            
+        # --- 7. OLS INDEPENDENT CHECK (User Request) ---
+        # This checks if W can explain tau locally, ignoring global scaling/coupling.
+        print("\n[Sanity Check] Running Independent OLS for Exp A and B...")
+        solver = LinearSolver(
+            method='lstsq',
+            regularization=None,
+            alpha=0.0,
+            constraints=None,
+            bounds=None,
+            verbose=False, # Set to True if you want solver logs
+        )
+        
+        # Solve A (Unloaded)
+        phi_ols_A = solver.solve(W_base_A, tau_A_flat)
+        tau_ols_A_flat = W_base_A @ phi_ols_A
+        
+        # Solve B (Loaded)
+        phi_ols_B = solver.solve(W_base_B, tau_B_flat)
+        tau_ols_B_flat = W_base_B @ phi_ols_B
+        
+        # --- 8. FANCY PLOTTING: Pinocchio vs Measured vs Identified ---
+        if plotting:
+            import matplotlib.pyplot as plt
+            import matplotlib.gridspec as gridspec
+            
+            # --- Helper to reshape flat vectors back to (Samples, Joints) ---
+            def reshape_to_joints(flat_vec, n_samples, n_joints):
+                return flat_vec.reshape((n_samples, n_joints), order='F')
+
+            # Prepare Data for Plotting
+            # A: Unloaded
+            tau_meas_A = reshape_to_joints(tau_A_flat, self.num_samples_A, nb_joints_partial)
+            tau_pin_A  = reshape_to_joints(tau_A_synthetic, self.num_samples_A, nb_joints_partial)
+            tau_id_A   = reshape_to_joints(tau_ols_A_flat, self.num_samples_A, nb_joints_partial)
+            
+            # B: Loaded
+            tau_meas_B = reshape_to_joints(tau_B_flat, self.num_samples_B, nb_joints_partial)
+            tau_pin_B  = reshape_to_joints(tau_B_synthetic, self.num_samples_B, nb_joints_partial)
+            tau_id_B   = reshape_to_joints(tau_ols_B_flat, self.num_samples_B, nb_joints_partial)
+
+            def plot_fancy_comparison(title, tau_pin, tau_meas, tau_id, joint_names):
+                n_j = len(joint_names)
+                fig = plt.figure(figsize=(12, 3 * n_j))
+                gs = gridspec.GridSpec(n_j, 1, figure=fig)
+                fig.suptitle(title, fontsize=16, fontweight='bold', y=0.99)
+                
+                colors = {'pin': '#2ca02c', 'meas': "#1f2eb4", 'id': '#d62728'} # Green, Blue, Red
+                
+                for j in range(n_j):
+                    ax = fig.add_subplot(gs[j, 0])
+                    
+                    # Plot lines with slightly different widths/styles to see overlaps
+                    # 1. Measured (Thick, background)
+                    ax.plot(tau_meas[:, j], color=colors['meas'], linewidth=1.5, alpha=0.3, label='Measured')
+                    
+                    # 2. Pinocchio (Medium, solid)
+                    ax.plot(tau_pin[:, j], color=colors['pin'], linewidth=1.5, linestyle='-', alpha=0.8, label='Nominal')
+                    
+                    # 3. Identified OLS (Thin, dashed)
+                    ax.plot(tau_id[:, j], color=colors['id'], linewidth=1.5, linestyle='--', label='Identified')
+                    
+                    # Styling
+                    ax.set_ylabel(f'{joint_names[j]}\nTorque (Nm)', fontsize=10, fontweight='bold')
+                    ax.grid(True, which='both', linestyle='--', alpha=0.4)
+                    ax.spines['top'].set_visible(False)
+                    ax.spines['right'].set_visible(False)
+                    
+                    # Error text (RMSE between Pinocchio and ID)
+                    rmse = np.sqrt(np.mean((tau_pin[:, j] - tau_id[:, j])**2))
+                    ax.text(0.02, 0.90, f'Fit RMSE: {rmse:.4f} Nm', transform=ax.transAxes, 
+                            fontsize=9, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+
+                    if j == 0:
+                        ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.25), ncol=3, frameon=False, fontsize=10)
+                    
+                    if j == n_j - 1:
+                        ax.set_xlabel('Time Samples', fontsize=11)
+                
+                plt.tight_layout()
+                plt.subplots_adjust(top=0.92) # Make room for title/legend
+                plt.show()
+
+            def plot_correlation(tau_mea, tau_pin):
+                """
+                Computes cross-correlation between Measured Torque (tau_mea) and 
+                Pinocchio Theoretical Torque (tau_pin) to detect time shifts (lag).
+                """
+                # 1. Normalize signals (Zero Mean, Unit Variance)
+                # We remove the mean and divide by std deviation so we compare 'shape' only.
+                # This prevents gain errors (amplitude differences) from affecting the lag check.
+                t_m = (tau_mea - np.mean(tau_mea))
+                std_m = np.std(t_m)
+                if std_m > 1e-9: t_m /= std_m
+                
+                t_p = (tau_pin - np.mean(tau_pin))
+                std_p = np.std(t_p)
+                if std_p > 1e-9: t_p /= std_p
+
+                # 2. Compute Correlation
+                correlation = signal.correlate(t_m, t_p, mode='full')
+                lags = signal.correlation_lags(len(t_m), len(t_p), mode='full')
+                
+                # 3. Find Peak Lag
+                lag_idx = np.argmax(correlation)
+                lag_samples = lags[lag_idx]
+                
+                print(f"\n[Correlation Check]")
+                print(f"  -> Detected Lag: {lag_samples} samples")
+                if lag_samples == 0:
+                    print("  -> Status: PERFECTLY SYNCHRONIZED")
+                elif lag_samples < 0:
+                    print("  -> Status: Measured Torque is AHEAD (Shift Pinocchio LEFT)")
+                else:
+                    print("  -> Status: Measured Torque is BEHIND (Shift Pinocchio RIGHT)")
+
+                # 4. Plot Results
+                fig, axes = plt.subplots(2, 1, figsize=(10, 8))
+                
+                # Plot A: Overlay 
+                axes[0].set_title(f"Signal Overlay (Lag: {lag_samples})")
+                axes[0].plot(t_m, label='Measured (Norm)', color='blue', alpha=0.6)
+                axes[0].plot(t_p, label='Pinocchio (Norm)', color='red', alpha=0.6, linestyle='--')
+                axes[0].legend()
+                axes[0].grid(True, alpha=0.3)
+                
+                # Plot B: Correlation Peak
+                axes[1].set_title("Cross-Correlation Function")
+                axes[1].plot(lags, correlation, color='k')
+                axes[1].axvline(lag_samples, color='r', linestyle='--', label=f'Peak @ {lag_samples}')
+                axes[1].axvline(0, color='gray', linestyle=':', alpha=0.5)
+                axes[1].set_xlabel("Lag (Samples)")
+                axes[1].set_ylabel("Correlation")
+                axes[1].legend()
+                axes[1].grid(True, alpha=0.3)
+                
+                # Zoom x-axis on the correlation peak to make it readable
+                axes[1].set_xlim(-50, 50) # Look at +/- 50 samples around 0
+                
+                plt.tight_layout()
+                plt.show()
+                
+            # Active Joint Names
+            j_names = [self.identif_config["active_joints"][i] for i in range(nb_joints_partial)]
+            
+            plot_correlation(tau_A_flat, tau_A_synthetic)
+            plot_correlation(tau_B_flat, tau_B_synthetic)
+            
+            print("\n[Plotting] 1. OLS Check - Experiment A (Unloaded)")
+            plot_fancy_comparison("Sanity Check A: Unloaded Dynamics (OLS)", tau_pin_A, tau_meas_A, tau_id_A, j_names)
+            
+            print("\n[Plotting] 2. OLS Check - Experiment B (Loaded)")
+            plot_fancy_comparison("Sanity Check B: Loaded Dynamics (OLS)", tau_pin_B, tau_meas_B, tau_id_B, j_names)
 
         return gains
