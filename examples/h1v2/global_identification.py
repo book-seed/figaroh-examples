@@ -35,41 +35,42 @@ def main():
 
     # Create identification object
     h1v2_iden = H1v2Identification(h1v2, "config/h1v2_config.yaml")
-    h1v2_iden.filter_config = {'differentiation_method': 'gradient', 'filter_params': {'window_length': 18, 'polyorder': 6, 'mode': 'nearest'}} 
+    h1v2_iden.filter_config = {'differentiation_method': 'gradient', 'filter_params': {'cutoff_hz': 5, 'order': 4}} 
 
     # Define additional parameters excluded from yaml files
     ps = h1v2_iden.identif_config
     
-    # ps["active_joints"] = ['left_shoulder_pitch_joint', 'left_shoulder_roll_joint', 'left_shoulder_yaw_joint', 'left_elbow_joint', 'left_wrist_roll_joint', 'left_wrist_pitch_joint', 'left_wrist_yaw_joint']
-    ps["active_joints"] = ['left_shoulder_pitch_joint', 'left_shoulder_roll_joint', 'left_shoulder_yaw_joint', 'left_elbow_joint']
-    # ps["untrustworthy_joints"] = ['left_wrist_roll_joint', 'left_wrist_pitch_joint', 'left_wrist_yaw_joint']
-    ps["untrustworthy_joints"] = ['']
-
+    ps["active_joints"] = ['left_shoulder_pitch_joint', 'left_shoulder_roll_joint', 'left_shoulder_yaw_joint', 'left_elbow_joint', 'left_wrist_roll_joint', 'left_wrist_pitch_joint', 'left_wrist_yaw_joint']
+    
     # Joint parameters
     ps["act_Jid"] = [h1v2_iden.model.getJointId(i) for i in ps["active_joints"]]
     ps["act_J"] = [h1v2_iden.model.joints[jid] for jid in ps["act_Jid"]]
     ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
     ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
+    
+    # Joint armature
+    ARMATURE_N7520_14_3 = 0.01017752
+    ARMATURE_N7520_22_5 = 0.025101925
+    ARMATURE_N5020_16 = 0.003609725
+    
+    ps["armatures"] = [ARMATURE_N7520_22_5, ARMATURE_N7520_22_5, ARMATURE_N7520_14_3, ARMATURE_N7520_22_5, ARMATURE_N5020_16, ARMATURE_N5020_16, ARMATURE_N5020_16]    
 
     # Dataset paths
     data_pathes_A = {}
-    data_pathes_A["pos_data"] = "data/identification/mujoco/exp_A/h1_position.csv"
-    data_pathes_A["vel_data"] = "data/identification/mujoco/exp_A/h1_velocity.csv"
-    data_pathes_A["torque_data"] = "data/identification/mujoco/exp_A/h1_effort.csv"
-    
+    data_pathes_A["pos_data"] = "data/identification/real/exp_A/hardware/h1_position.csv"
+    data_pathes_A["vel_data"] = "data/identification/real/exp_A/hardware/h1_velocity.csv"
+    data_pathes_A["torque_data"] = "data/identification/real/exp_A/hardware/h1_effort.csv"
     data_pathes_B = {}
-    data_pathes_B["pos_data"] = "data/identification/mujoco/exp_B/h1_position.csv"
-    data_pathes_B["vel_data"] = "data/identification/mujoco/exp_B/h1_velocity.csv"
-    data_pathes_B["torque_data"] = "data/identification/mujoco/exp_B/h1_effort.csv"
+    data_pathes_B["pos_data"] = "data/identification/real/exp_B/hardware/h1_position.csv"
+    data_pathes_B["vel_data"] = "data/identification/real/exp_B/hardware/h1_velocity.csv"
+    data_pathes_B["torque_data"] = "data/identification/real/exp_B/hardware/h1_effort.csv"
     
     # Load data
     ps["mass_load"] = 2.549
-    ps["which_body_loaded"] = h1v2_iden.model.getJointId('left_elbow_joint')
-    # ps["which_body_loaded"] = h1v2_iden.model.getJointId('left_wrist_yaw_joint')
+    ps["which_body_loaded"] = h1v2_iden.model.getJointId('left_wrist_yaw_joint')
 
-    # h1v2_iden.initialize_global(data_pathes_A, data_pathes_B, truncate_A=(9000, 18500), truncate_B=(6000, 25000))
-    h1v2_iden.initialize_global(data_pathes_A, data_pathes_B, truncate_A=(3000, 8000), truncate_B=(3667, 13000))
-    
+    h1v2_iden.initialize_global(data_pathes_A, data_pathes_B, truncate_A=(int(14.8/0.002), int(54/0.002)), truncate_B=(int(12/0.002), int(54/0.002)))
+
     # Solve identification
     h1v2_iden.solve_global(
         plotting=True,
