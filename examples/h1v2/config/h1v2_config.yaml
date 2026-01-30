@@ -65,7 +65,7 @@ tasks:
       model_components:
         friction: true
         joint_offset: true
-        actuator_inertia: false
+        actuator_inertia: true
         
     signal_processing:
       sampling_frequency: 5000.0  # High rate due to 1/0.0002 = 5000Hz

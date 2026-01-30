@@ -215,7 +215,7 @@ class H1v2Identification(BaseIdentification):
             processed_data = {k: np.array([]) for k in ["positions", "velocities", "accelerations", "timestamps"]}
 
         # --- 6. PLOTTING ---
-        # self._plot_segmentation_results(raw_ts, raw_pos, raw_vel, raw_acc_calc, processed_data, valid_segments, valid_mask)
+        self._plot_segmentation_results(raw_ts, raw_pos, raw_vel, raw_acc_calc, processed_data, valid_segments, valid_mask)
         
         return processed_data, valid_segments
 
@@ -239,7 +239,7 @@ class H1v2Identification(BaseIdentification):
 
         if torque_chunks:
             processed_data["torques"] = np.vstack(torque_chunks)
-            # self._plot_single_signal(raw_data, valid_segments, "torques", raw_torques, processed_data["torques"])
+            self._plot_single_signal(raw_data, valid_segments, "torques", raw_torques, processed_data["torques"])
 
             return processed_data["torques"]
         return np.array([])
@@ -527,8 +527,6 @@ class H1v2Identification(BaseIdentification):
         cond_num = np.linalg.cond(W_base_A)
         print(f"Condition Number = {cond_num:.2e}")
         
-        tau_A_armature = self.processed_data_A["accelerations"] * np.array(self.identif_config["armatures"])
-
         # --- 3. Experiment B (Loaded) ---
         W_B = build_regressor_basic(
             self.robot, 
@@ -537,10 +535,8 @@ class H1v2Identification(BaseIdentification):
             self.processed_data_B["accelerations"], 
             self.identif_config
         )
-        
-        tau_B_armature = self.processed_data_B["accelerations"] * np.array(self.identif_config["armatures"])
-        
-        # # --- 3. GENERATE SYNTHETIC TORQUE ---
+                
+        # # # --- 3. GENERATE SYNTHETIC TORQUE ---
         # print("  -> Constructing Theoretical Parameter Vector...")
         # phi_standard_list = []
 
@@ -619,25 +615,78 @@ class H1v2Identification(BaseIdentification):
         #     self.identif_config,
         #     bounds
         # )
-        
         # n_base_params = W_base_A.shape[1]
         # gains = V_norm[n_base_params : n_base_params + nb_joints_partial]
         
-        phi_r, phi_l, k_vals, tau_load_B = solve_differential_LMI_OLS(
-            W_A, self.processed_data_A["torques"], tau_A_armature,
-            W_B, self.processed_data_B["torques"], tau_B_armature,
-            mass_load_known=self.identif_config["mass_load"],  
-            load_joint_idx=self.identif_config["which_body_loaded"],
-            nb_joints=nb_joints,
-            joint_names=self.identif_config["active_joints"],
-            phi_cad_dict=params_standard,
-            lambda_r=0.01,              
-            lambda_l=0.1,              
-        )
-        print(phi_r)
-        print(phi_l)
-        print(phi_r.reshape(7, 13)-np.array(list(params_standard.values())).reshape(7, 13))
-                
+        # lambda_r_values = [0.1, 1.0, 10.0, 100.0, 1000.0, 5000.0]
+        # errors = []
+        # deviations = []
+        
+        # print(f"{'Lambda':<10} | {'RMSE (Nm)':<12} | {'Dev from CAD':<12}")
+        # print("-" * 40)
+
+        # for lambda_r in lambda_r_values:
+        #     phi_r, phi_l, k_vals, tau_load_B, (term_fit, term_robot, term_load) = solve_differential_LMI_OLS(
+        #         W_A, self.processed_data_A["torques"], tau_A_armature,
+        #         W_B, self.processed_data_B["torques"], tau_B_armature,
+        #         mass_load_known=self.identif_config["mass_load"],  
+        #         load_joint_idx=self.identif_config["which_body_loaded"],
+        #         nb_joints=nb_joints,
+        #         joint_names=self.identif_config["active_joints"],
+        #         phi_cad_dict=params_standard,
+        #         lambda_r=lambda_r,              
+        #         lambda_l=lambda_r,           
+        #     )
+            
+        #     rmse = np.sqrt(term_fit)
+        #     errors.append(rmse)
+            
+        #     if lambda_r > 1e-9:
+        #         dev_norm = np.sqrt(term_robot / lambda_r)
+        #     else:
+        #         dev_norm = 0.0 
+        #     deviations.append(dev_norm)
+            
+        #     print(f"{lambda_r:<10.1f} | {rmse:<12.4f} | {dev_norm:<12.4f}")
+
+        # # --- 3. Plotting the L-Curve ---
+        # import matplotlib.pyplot as plt
+        
+        # fig, ax1 = plt.subplots(figsize=(8, 5))
+
+        # # Plot Error (Data Fit)
+        # color = 'tab:red'
+        # ax1.set_xlabel('Lambda R (Log Scale)')
+        # ax1.set_ylabel('RMSE (Nm)', color=color)
+        # ax1.plot(lambda_r_values, errors, color=color, marker='o', label='Fit Error')
+        # ax1.tick_params(axis='y', labelcolor=color)
+        # ax1.set_xscale('log')
+        # ax1.grid(True, which="both", ls="-", alpha=0.3)
+
+        # # Plot Deviation (Prior)
+        # ax2 = ax1.twinx()  
+        # color = 'tab:blue'
+        # ax2.set_ylabel('Parameter Deviation (Norm)', color=color)
+        # ax2.plot(lambda_r_values, deviations, color=color, marker='x', linestyle='--', label='CAD Deviation')
+        # ax2.tick_params(axis='y', labelcolor=color)
+
+        # plt.title('L-Curve Analysis: Regularization Trade-off')
+        # plt.tight_layout()
+        # plt.show()
+        # 
+        phi_r, phi_l, k_vals, tau_load_B, (term_fit, term_robot, term_load) = solve_differential_LMI_OLS(
+                W_A, self.processed_data_A["torques"],
+                W_B, self.processed_data_B["torques"],
+                mass_load_known=self.identif_config["mass_load"],  
+                load_joint_idx=self.identif_config["which_body_loaded"],
+                nb_joints=nb_joints,
+                joint_names=self.identif_config["active_joints"],
+                phi_cad_dict=params_standard,
+                armature_vals=self.identif_config["armatures"],
+                lambda_r=10.0,              
+                lambda_l=10.0,           
+            )
+
         # --- 6. PLOTTING VALIDATION (CORRECTED) ---
         if plotting:
             import matplotlib.pyplot as plt
@@ -647,7 +696,7 @@ class H1v2Identification(BaseIdentification):
             print("\n[Validation] Plotting Experiment A (Unloaded Robot Only)...")
             tau_corrected_A = self.processed_data_A["torques"] * k_vals
             tau_model_A_flat = W_A @ phi_r
-            tau_model_A = tau_model_A_flat.reshape((self.num_samples_A, nb_joints), order='F') + tau_A_armature
+            tau_model_A = tau_model_A_flat.reshape((self.num_samples_A, nb_joints), order='F')
             
             figA, axsA = plt.subplots(nb_joints, 1, figsize=(10, 3 * nb_joints), sharex=True)
             figA.suptitle(f'Validation A: UNLOADED (Base Params)', fontsize=16)
@@ -669,7 +718,7 @@ class H1v2Identification(BaseIdentification):
             print("\n[Validation] Plotting Experiment B (Loaded)...")
             tau_corrected_B = self.processed_data_B["torques"] * k_vals
             tau_model_B_flat = W_B @ phi_r + tau_load_B
-            tau_model_B = tau_model_B_flat.reshape((self.num_samples_B, nb_joints), order='F') + tau_B_armature
+            tau_model_B = tau_model_B_flat.reshape((self.num_samples_B, nb_joints), order='F')
 
             figB, axsB = plt.subplots(nb_joints, 1, figsize=(10, 3 * nb_joints), sharex=True)
             figB.suptitle(f'Validation B: LOADED (Payload)', fontsize=16)
@@ -769,3 +818,5 @@ class H1v2Identification(BaseIdentification):
             
         #     print("\n[Plotting] 2. OLS Check - Experiment B (Loaded)")
         #     plot_fancy_comparison("Sanity Check B: Loaded Dynamics (OLS)", tau_pin_B, tau_meas_B, tau_id_B, j_names)
+        
+        return phi_r
