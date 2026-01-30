@@ -2,6 +2,7 @@ import numpy as np
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
+
 def save_identified_params_to_urdf(
     original_urdf_path,
     output_urdf_path,

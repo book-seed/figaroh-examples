@@ -22,6 +22,7 @@ parent_dir = os.path.dirname(os.path.dirname(current_dir))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 from examples.h1v2.utils.h1v2_tools import H1v2Identification
+from examples.h1v2.utils.urdf_exporter import save_identified_params_to_urdf
 from figaroh.tools.robot import load_robot
 
 
@@ -35,7 +36,7 @@ def main():
 
     # Create identification object
     h1v2_iden = H1v2Identification(h1v2, "config/h1v2_config.yaml")
-    h1v2_iden.filter_config = {'differentiation_method': 'gradient', 'filter_params': {'cutoff_hz': 5, 'order': 4}} 
+    h1v2_iden.filter_config = {'differentiation_method': 'gradient', 'filter_params': {'cutoff_hz': 10, 'order': 4}} 
 
     # Define additional parameters excluded from yaml files
     ps = h1v2_iden.identif_config
@@ -72,10 +73,10 @@ def main():
     h1v2_iden.initialize_global(data_pathes_A, data_pathes_B, truncate_A=(int(14.8/0.002), int(54/0.002)), truncate_B=(int(12/0.002), int(54/0.002)))
 
     # Solve identification
-    h1v2_iden.solve_global(
-        plotting=True,
-        save_results=True,
-    )
+    phi_r = h1v2_iden.solve_global(plotting=True, save_results=True)
+    
+    # Export the new URDF
+    save_identified_params_to_urdf("urdf/h1_2_handless.urdf", "urdf/identified_h1_2_handless.urdf", phi_r, ps["active_joints"], ps["armatures"], True)
 
 
 if __name__ == "__main__":
