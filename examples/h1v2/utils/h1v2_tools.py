@@ -22,8 +22,6 @@ from figaroh.tools.regressor import (
     build_regressor_basic,
     get_index_eliminate,
     build_regressor_reduced,
-    build_total_regressor_current,
-    solve_LMI_OLS, 
     solve_differential_LMI_OLS
 )
 from figaroh.tools.qrdecomposition import get_baseParams
@@ -57,7 +55,6 @@ class H1v2Identification(BaseIdentification):
         
         # 2. Filter Torques (Butterworth) using same segments
         processed_data["torques"] = self.process_torque_data(raw_data, processed_data, valid_segments)
-        # processed_data = self._align_signals(processed_data, shift_amount=-3)
         
         # 4. Build Full Config
         num_samples = processed_data["positions"].shape[0]
@@ -65,47 +62,6 @@ class H1v2Identification(BaseIdentification):
                 
         return processed_data, num_samples
 
-    def _align_signals(self, processed_data, shift_amount):
-        """
-        Shifts Torques relative to Kinematics to fix time lag.
-        
-        Args:
-            processed_data: Dictionary with 'torques', 'positions', etc.
-            shift_amount (int): 
-                If Lag is POSITIVE (Torque is late), use NEGATIVE shift (e.g., -3).
-                If Lag is NEGATIVE (Torque is early), use POSITIVE shift (e.g., +3).
-        """
-        if shift_amount == 0:
-            return processed_data
-            
-        print(f"  -> Aligning Data: Rolling Torque by {shift_amount} samples")
-        
-        # 1. Roll the Torque Array
-        # np.roll moves data. Data that "falls off" the end wraps to the beginning.
-        processed_data["torques"] = np.roll(processed_data["torques"], shift_amount, axis=0)
-        
-        # 2. Slice off the "Wrapped" Garbage
-        # We must delete the samples that wrapped around to prevent spikes.
-        # We also trim the Kinematics to match the new length.
-        if shift_amount < 0:
-            # Shifted LEFT (Backwards). The last 'N' samples are now garbage (wrapped from start).
-            # We also lose the first 'N' samples of validity.
-            # Crop END of arrays.
-            cut = abs(shift_amount)
-            for key in ["positions", "velocities", "accelerations", "torques", "timestamps"]:
-                if key in processed_data:
-                    processed_data[key] = processed_data[key][:-cut]
-                    
-        elif shift_amount > 0:
-            # Shifted RIGHT (Forwards). The first 'N' samples are garbage.
-            # Crop START of arrays.
-            cut = shift_amount
-            for key in ["positions", "velocities", "accelerations", "torques", "timestamps"]:
-                if key in processed_data:
-                    processed_data[key] = processed_data[key][cut:]
-                    
-        return processed_data
-    
     def calculate_full_regressor(self, model, processed_data, num_samples):
         """Build regressor matrix, compute pre-identified values of standard 
         parameters, compute joint torques based on pre-identified standard 
