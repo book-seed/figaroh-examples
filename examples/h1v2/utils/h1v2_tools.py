@@ -192,7 +192,7 @@ class H1v2Identification(BaseIdentification):
         # --- 4. BUTTERWORTH FILTERING ---
         filtered_pos = self._apply_butterworth(raw_pos, median_dt)
         filtered_vel = self._apply_butterworth(raw_vel, median_dt)
-        filtered_acc = self._apply_butterworth(raw_acc_calc, median_dt)
+        filtered_acc = np.gradient(filtered_vel, median_dt, axis=0)
         
         chunks = {"positions": [], "velocities": [], "accelerations": []}     
 
