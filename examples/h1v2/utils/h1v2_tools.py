@@ -7,6 +7,7 @@ that are specific to working with the ROBOT_TITLE robot.
 
 import pandas as pd
 import re
+import trimesh
 import numpy as np
 import matplotlib.pyplot as plt
 import pinocchio as pin
@@ -37,12 +38,15 @@ class H1v2Identification(BaseIdentification):
         super().__init__(robot, config_file)
         print("H1v2Identification initialized for H1v2 robot")
     
-    def initialize_global(self, data_pathes_A, data_pathes_B, truncate_A=None, truncate_B=None):
+    def initialize_global(self, data_pathes_A, data_pathes_B, data_pathes_test, truncate_A=None, truncate_B=None, truncate_test=None):
         # Experiment A
         self.processed_data_A, self.num_samples_A = self.process_data(data_pathes=data_pathes_A, truncate=truncate_A)
         
         # Experiment B
         self.processed_data_B, self.num_samples_B = self.process_data(data_pathes=data_pathes_B, truncate=truncate_B)
+        
+        # Experiment test
+        self.processed_data_test, self.num_samples_test = self.process_data(data_pathes=data_pathes_test, truncate=truncate_test)
         
     def process_data(self, data_pathes, truncate=None):
         """Load and process data"""
@@ -215,7 +219,7 @@ class H1v2Identification(BaseIdentification):
             processed_data = {k: np.array([]) for k in ["positions", "velocities", "accelerations", "timestamps"]}
 
         # --- 6. PLOTTING ---
-        self._plot_segmentation_results(raw_ts, raw_pos, raw_vel, raw_acc_calc, processed_data, valid_segments, valid_mask)
+        # self._plot_segmentation_results(raw_ts, raw_pos, raw_vel, raw_acc_calc, processed_data, valid_segments, valid_mask)
         
         return processed_data, valid_segments
 
@@ -239,7 +243,7 @@ class H1v2Identification(BaseIdentification):
 
         if torque_chunks:
             processed_data["torques"] = np.vstack(torque_chunks)
-            self._plot_single_signal(raw_data, valid_segments, "torques", raw_torques, processed_data["torques"])
+            # self._plot_single_signal(raw_data, valid_segments, "torques", raw_torques, processed_data["torques"])
 
             return processed_data["torques"]
         return np.array([])
@@ -466,37 +470,37 @@ class H1v2Identification(BaseIdentification):
             "tau_estimated": tau_estimated,
             "tau_processed": tau_processed,
         }
-        
-    def _get_bounds(self, variable_list: list[str]) -> list[tuple]:
+
+    def get_link_geometric_bounds(self):
         """
-        Dynamically determines optimization bounds based on the Leading Term 
-        and the algebraic structure of the Base Parameter linear combination.
-        
-        P_BOUND (0, +inf): Principal Inertias (Ixx, Iyy, Izz, Ia), Friction (fv, fs), Mass (m).
-        N_BOUND (-inf, +inf): Static Moments (mx, my, mz), Products of Inertia (Ixy...), 
-                            Offsets, and DIFFERENCES of Principal Inertias (e.g. Ixx - Iyy).
+        Extracts the bounding box of collision meshes for each active joint.
+        Returns a dict: {joint_name: [[min_x, y, z], [max_x, y, z]]}
         """
-        unbounded_prefixes = ('mx', 'my', 'mz', 'off', 'Ixy', 'Ixz', 'Iyz')
-    
-        subtracted_inertia_pattern = re.compile(r'-\s*(?:[\d\.]+(?:e[+-]?\d+)?\*)?I[xyz]{2}')
-
-        dynamic_bounds = []
-
-        for var_string in variable_list:
-            leading_term = var_string.split()[0]
-            bound_type = self.P_BOUND
+        bounds_dict = {}
+        geom_model = self.robot.collision_model
+        
+        for j_name in self.identif_config["active_joints"]:
+            joint_id = self.model.getJointId(j_name)
             
-            # --- Check 1: Is the leading term inherently unbounded? ---
-            if leading_term.startswith(unbounded_prefixes):
-                bound_type = self.N_BOUND
+            # Find all collision objects attached to this joint
+            joint_vertices = []
+            for geom_obj in geom_model.geometryObjects:
+                if geom_obj.parentJoint == joint_id:
+                    # Get mesh and apply its placement relative to joint
+                    mesh = trimesh.load(geom_obj.meshPath)
+                    T = geom_obj.placement.homogeneous
+                    mesh.apply_transform(T)
+                    joint_vertices.append(mesh.vertices)
             
-            # --- Check 2: Special Case - Difference of Principal Inertias ---
-                if subtracted_inertia_pattern.search(var_string):
-                    bound_type = self.N_BOUND
-                            
-            dynamic_bounds.append(bound_type)
-
-        return dynamic_bounds
+            if joint_vertices:
+                all_v = np.vstack(joint_vertices)
+                # Calculate AABB [min_coords, max_coords]
+                bounds_dict[j_name] = [np.min(all_v, axis=0), np.max(all_v, axis=0)]
+            else:
+                # Fallback if no mesh found (e.g., 5cm box)
+                bounds_dict[j_name] = [np.array([-0.05]*3), np.array([0.05]*3)]
+                
+        return bounds_dict
         
     def solve_global(self, zero_tolerance=1e-6, plotting=True, save_results=False):
         print(f"\n[Global ID] Starting WTLS Identification (Reference Function)...")
@@ -514,7 +518,7 @@ class H1v2Identification(BaseIdentification):
         W_e = build_regressor_reduced(W_rand, idx_e)
         _, params_base, idx_base = get_baseParams(W_e, params_r, params_standard)
         
-        # --- 2. Experiment A (Unloaded) ---
+        # --- 2. Experiment A (Loaded) ---
         W_A = build_regressor_basic(
             self.robot, 
             self.processed_data_A["positions"], 
@@ -535,288 +539,173 @@ class H1v2Identification(BaseIdentification):
             self.processed_data_B["accelerations"], 
             self.identif_config
         )
-                
-        # # # --- 3. GENERATE SYNTHETIC TORQUE ---
-        # print("  -> Constructing Theoretical Parameter Vector...")
-        # phi_standard_list = []
-
-        # for i in range(1, self.model.njoints): 
-        #     phi_i = self.model.inertias[i].toDynamicParameters()
-        #     phi_standard_list.extend(phi_i)
-            
-        #     if self.identif_config.get("has_friction", False):
-        #         phi_standard_list.extend([0.001, 0.1]) # fv=0.1, fs=0.1 (Fake Friction)
-        #     if self.identif_config.get("has_actuator_inertia", False):
-        #         phi_standard_list.append(0.01)       # ia (Fake Inertia)
-        #     if self.identif_config.get("has_joint_offset", False):
-        #         phi_standard_list.append(0.0)        # offset
-
-        # phi_standard = np.array(phi_standard_list)
-            
-        # tau_A_synthetic = W_A @ phi_standard
         
-        # m_load = self.identif_config["mass_load"]       
-        # # r_in  = 0.03/2
-        # r_in  = 0.0
-        # r_out = 0.126/2
-        # h_th  = 0.015
-        # p_com = np.array([0.228 + 0.0775, 0.0, 0.0])
+        # --- 4. Experiment Test (Unloaded) ---
+        W_test = build_regressor_basic(
+            self.robot, 
+            self.processed_data_test["positions"], 
+            self.processed_data_test["velocities"], 
+            self.processed_data_test["accelerations"], 
+            self.identif_config
+            )
         
-        # val_Ix = 0.5 * m_load * (r_in**2 + r_out**2)
-        # val_Iy_Iz = (1.0/12.0) * m_load * (3*(r_in**2 + r_out**2) + h_th**2)    
-        # I_load_at_com = np.diag([val_Ix, val_Iy_Iz, val_Iy_Iz])
-        # p_norm_sq = np.dot(p_com, p_com)
-        # p_outer   = np.outer(p_com, p_com)
-        # I_load_at_origin = I_load_at_com + m_load * (p_norm_sq * np.eye(3) - p_outer)
-        # h_load = m_load * p_com
-
-        # delta_phi_load = np.array([
-        #         m_load,                # Mass
-        #         h_load[0], 
-        #         h_load[1], 
-        #         h_load[2],
-        #         I_load_at_origin[0,0], # Ixx
-        #         I_load_at_origin[0,1], # Ixy
-        #         I_load_at_origin[1,1], # Iyy
-        #         I_load_at_origin[0,2], # Ixz
-        #         I_load_at_origin[1,2], # Iyz
-        #         I_load_at_origin[2,2]  # Izz
-        #     ])
+        # --- Get mesh bounds ---
+        mesh_bounds = self.get_link_geometric_bounds()
         
-        # cols_per_joint = 10 
-        # if self.identif_config.get("has_friction", False): cols_per_joint += 2
-        # if self.identif_config.get("has_actuator_inertia", False): cols_per_joint += 1
-        # if self.identif_config.get("has_joint_offset", False): cols_per_joint += 1
-        
-        # idx_body = self.identif_config["which_body_loaded"] - 1
-        # start_col = idx_body * cols_per_joint
-        # W_payload_block = W_B[:, start_col : start_col + 10]
-        # tau_payload = W_payload_block @ delta_phi_load
-        
-        # tau_B_synthetic = (W_B @ phi_standard) + tau_payload  
-        
-        # # gains = np.arange(1, nb_joints_partial + 1)
-        # gains = np.ones(nb_joints_partial)
-        # tau_A_flat = (tau_A_synthetic.reshape(nb_joints_partial, self.num_samples_A).T / gains).T.flatten() # + 0.3*np.random.rand(*tau_A_synthetic.shape)
-        # tau_B_flat = (tau_B_synthetic.reshape(nb_joints_partial, self.num_samples_B).T / gains).T.flatten() # + 0.3*np.random.rand(*tau_B_synthetic.shape)
-        
-        # tau_A_flat = self.processed_data_A["torques"].flatten(order='F')  # comment to use pinocchio instead of mujoco for the torques and the TLS
-        # tau_B_flat = self.processed_data_B["torques"].flatten(order='F')
-        # tau_A_flat = filter_blocks(tau_A_flat, self.num_samples_A)
-        # tau_B_flat = filter_blocks(tau_B_flat, self.num_samples_B)
-
-        # # --- 5. Solve ---
-        # W_tot, V_norm, residue = build_total_regressor_current(
-        #     W_base_A, 
-        #     W_base_B, 
-        #     W_B, 
-        #     tau_A_flat, 
-        #     tau_B_flat, 
-        #     self.identif_config,
-        #     bounds
-        # )
-        # n_base_params = W_base_A.shape[1]
-        # gains = V_norm[n_base_params : n_base_params + nb_joints_partial]
-        
-        # lambda_r_values = [0.1, 1.0, 10.0, 100.0, 1000.0, 5000.0]
+        # # --- 3. PARETO FRONT ANALYSIS ---         
+        # lambda_r_values = [0.01, 0.1, 1.0, 10.0, 100.0, 1_000.0, 5_000.0, 10_000.0]
         # errors = []
         # deviations = []
         
-        # print(f"{'Lambda':<10} | {'RMSE (Nm)':<12} | {'Dev from CAD':<12}")
+        # print(f"\n{'Lambda':<10} | {'RMSE (Nm)':<12} | {'Dev from CAD':<12}")
         # print("-" * 40)
 
-        # for lambda_r in lambda_r_values:
-        #     phi_r, phi_l, k_vals, tau_load_B, (term_fit, term_robot, term_load) = solve_differential_LMI_OLS(
-        #         W_A, self.processed_data_A["torques"], tau_A_armature,
-        #         W_B, self.processed_data_B["torques"], tau_B_armature,
-        #         mass_load_known=self.identif_config["mass_load"],  
+        # for l in lambda_r_values:
+        #     # 1. Solve
+        #     res = solve_differential_LMI_OLS(
+        #         W_A, self.processed_data_A["torques"], self.identif_config["mass_load_A"],
+        #         W_B, self.processed_data_B["torques"], self.identif_config["mass_load_B"],
         #         load_joint_idx=self.identif_config["which_body_loaded"],
         #         nb_joints=nb_joints,
         #         joint_names=self.identif_config["active_joints"],
         #         phi_cad_dict=params_standard,
-        #         lambda_r=lambda_r,              
-        #         lambda_l=lambda_r,           
+        #         armature_vals=self.identif_config["armatures"],
+        #         mesh_bounds=mesh_bounds,
+        #         lambda_r=l,              
+        #         lambda_l=l,
         #     )
             
-        #     rmse = np.sqrt(term_fit)
-        #     errors.append(rmse)
+        #     # Unpack results
+        #     phi_rob, phi_lA, phi_lB, k_tau, (tau_load_A_phys, tau_load_B_phys), (term_fit_norm, term_rob, term_load) = res
             
-        #     if lambda_r > 1e-9:
-        #         dev_norm = np.sqrt(term_robot / lambda_r)
+        #     # 2. COMPUTE PHYSICAL RMSE (Manual Reconstruction)
+        #     # Reconstruct Robot Torque
+        #     tau_identified_A_scaled = (W_A @ phi_rob + tau_load_A_phys).reshape((self.num_samples_A, nb_joints), order='F')
+        #     tau_identified_B_scaled = (W_B @ phi_rob + tau_load_B_phys).reshape((self.num_samples_B, nb_joints), order='F')
+            
+        #     # Scaled Measured Torque (Y * k)
+        #     tau_meas_A_scaled = self.processed_data_A["torques"] * k_tau
+        #     tau_meas_B_scaled = self.processed_data_B["torques"] * k_tau
+            
+        #     # Compute Global RMSE (Concatenate errors from A and B)
+        #     err_A = (tau_identified_A_scaled - tau_meas_A_scaled).flatten()
+        #     err_B = (tau_identified_B_scaled - tau_meas_B_scaled).flatten()
+        #     all_errors = np.concatenate([err_A, err_B])
+            
+        #     rmse_phys = np.sqrt(np.mean(all_errors**2))
+        #     errors.append(rmse_phys)
+            
+        #     # Compute Deviation
+        #     if l > 1e-9:
+        #         dev_norm = np.sqrt(term_rob / l)
         #     else:
         #         dev_norm = 0.0 
         #     deviations.append(dev_norm)
             
-        #     print(f"{lambda_r:<10.1f} | {rmse:<12.4f} | {dev_norm:<12.4f}")
+        #     print(f"{l:<10.1f} | {rmse_phys:<12.4f} | {dev_norm:<12.4f}")
 
-        # # --- 3. Plotting the L-Curve ---
-        # import matplotlib.pyplot as plt
+        # # --- 4. Plotting the L-Curve ---
+        # if plotting:
+        #     import matplotlib.pyplot as plt
+        #     fig, ax1 = plt.subplots(figsize=(8, 5))
+
+        #     color = 'tab:red'
+        #     ax1.set_xlabel('Lambda R (Log Scale)')
+        #     ax1.set_ylabel('Physical RMSE (Nm)', color=color) # Label updated
+        #     ax1.plot(lambda_r_values, errors, color=color, marker='o', label='Fit Error')
+        #     ax1.tick_params(axis='y', labelcolor=color)
+        #     ax1.set_xscale('log')
+        #     ax1.grid(True, which="both", ls="-", alpha=0.3)
+
+        #     ax2 = ax1.twinx()  
+        #     color = 'tab:blue'
+        #     ax2.set_ylabel('Parameter Deviation (Norm)', color=color)
+        #     ax2.plot(lambda_r_values, deviations, color=color, marker='x', linestyle='--', label='CAD Deviation')
+        #     ax2.tick_params(axis='y', labelcolor=color)
+
+        #     plt.title('L-Curve: Accuracy (Nm) vs Fidelity')
+        #     plt.tight_layout()
+        #     plt.show()
         
-        # fig, ax1 = plt.subplots(figsize=(8, 5))
-
-        # # Plot Error (Data Fit)
-        # color = 'tab:red'
-        # ax1.set_xlabel('Lambda R (Log Scale)')
-        # ax1.set_ylabel('RMSE (Nm)', color=color)
-        # ax1.plot(lambda_r_values, errors, color=color, marker='o', label='Fit Error')
-        # ax1.tick_params(axis='y', labelcolor=color)
-        # ax1.set_xscale('log')
-        # ax1.grid(True, which="both", ls="-", alpha=0.3)
-
-        # # Plot Deviation (Prior)
-        # ax2 = ax1.twinx()  
-        # color = 'tab:blue'
-        # ax2.set_ylabel('Parameter Deviation (Norm)', color=color)
-        # ax2.plot(lambda_r_values, deviations, color=color, marker='x', linestyle='--', label='CAD Deviation')
-        # ax2.tick_params(axis='y', labelcolor=color)
-
-        # plt.title('L-Curve Analysis: Regularization Trade-off')
-        # plt.tight_layout()
-        # plt.show()
-        # 
-        phi_r, phi_l, k_vals, tau_load_B, (term_fit, term_robot, term_load) = solve_differential_LMI_OLS(
-                W_A, self.processed_data_A["torques"],
-                W_B, self.processed_data_B["torques"],
-                mass_load_known=self.identif_config["mass_load"],  
+        phi_robot_val, phi_load_A_val, phi_load_B_val, k_tau_val, (tau_load_A, tau_load_B), (term_fit_val, term_robot_val, term_load_val) = solve_differential_LMI_OLS(
+                W_A, self.processed_data_A["torques"], self.identif_config["mass_load_A"],
+                W_B, self.processed_data_B["torques"], self.identif_config["mass_load_B"],
                 load_joint_idx=self.identif_config["which_body_loaded"],
                 nb_joints=nb_joints,
                 joint_names=self.identif_config["active_joints"],
                 phi_cad_dict=params_standard,
                 armature_vals=self.identif_config["armatures"],
-                lambda_r=10.0,              
-                lambda_l=10.0,           
+                mesh_bounds=mesh_bounds,
+                lambda_r=0.0001,              
+                lambda_l=0.1,           
             )
-
+        
+        print(phi_robot_val-list(params_standard.values()))
+        print(phi_load_A_val, phi_load_B_val)
+                
         # --- 6. PLOTTING VALIDATION (CORRECTED) ---
         if plotting:
-            import matplotlib.pyplot as plt
-            print(f"Gains: {k_vals}")
+            print(f"Gains: {k_tau_val}")
             
             # === PLOT 1: EXPERIMENT A (ROBOT ONLY) ===
-            print("\n[Validation] Plotting Experiment A (Unloaded Robot Only)...")
-            tau_corrected_A = self.processed_data_A["torques"] * k_vals
-            tau_model_A_flat = W_A @ phi_r
+            def plot_validation(title, tau_model, tau_corrected, k_tau_val, tau_nominal=None):
+                import matplotlib.pyplot as plt
+                    
+                figA, axsA = plt.subplots(nb_joints, 1, figsize=(10, 3 * nb_joints), sharex=True)
+                figA.suptitle(title, fontsize=16)
+                for j in range(nb_joints):
+                    joint_name = self.identif_config["active_joints"][j] if "active_joints" in self.identif_config else f"Joint {j}"
+                    ax = axsA[j]
+                    if tau_nominal is not None:
+                        ax.plot(tau_nominal[:, j], label='Nominal (x Gain)', color='red')
+                    ax.plot(tau_corrected[:, j], label='Measured (x Gain)', color='blue')
+                    ax.plot(tau_model[:, j], label='Identified Model', color='green')
+                    ax.set_title(f"Joint {j}: Gain = {k_tau_val[j]:.4f}")
+                    ax.set_ylabel(f'{joint_name}\n(Nm)')
+                    ax.grid(True, alpha=0.3)
+                    if j == 0: ax.legend(loc='upper right')
+                
+                axsA[-1].set_xlabel('Samples')
+                plt.tight_layout()
+                plt.show()
+                
+                if tau_nominal is not None:
+                    figA, axsA = plt.subplots(nb_joints, 1, figsize=(10, 3 * nb_joints), sharex=True)
+                    figA.suptitle(title, fontsize=16)
+                    for j in range(nb_joints):
+                        joint_name = self.identif_config["active_joints"][j] if "active_joints" in self.identif_config else f"Joint {j}"
+                        ax = axsA[j]
+                        ax.plot(np.abs(tau_corrected[:, j]-tau_nominal[:, j]), label='abs(Measured (x Gain) - Nominal (x Gain))', color='red')
+                        ax.plot(np.abs(tau_corrected[:, j]-tau_model[:, j]), label='abs(Measured (x Gain) - Identified Model)', color='green')
+                        ax.set_title(f"Joint {j}: Gain = {k_tau_val[j]:.4f}")
+                        ax.set_ylabel(f'{joint_name}\n(Nm)')
+                        ax.grid(True, alpha=0.3)
+                        if j == 0: ax.legend(loc='upper right')
+                    
+                    axsA[-1].set_xlabel('Samples')
+                    plt.tight_layout()
+                    plt.show()
+
+            tau_corrected_A = self.processed_data_A["torques"] * k_tau_val
+            tau_model_A_flat = W_A @ phi_robot_val + tau_load_A
             tau_model_A = tau_model_A_flat.reshape((self.num_samples_A, nb_joints), order='F')
+            tau_nominal_A_flat = W_A @ list(params_standard.values()) + tau_load_A
+            tau_nominal_A = tau_nominal_A_flat.reshape((self.num_samples_A, nb_joints), order='F')
+            plot_validation("LOADED (LEIGHT)", tau_model_A, tau_corrected_A, k_tau_val, tau_nominal=tau_nominal_A)
             
-            figA, axsA = plt.subplots(nb_joints, 1, figsize=(10, 3 * nb_joints), sharex=True)
-            figA.suptitle(f'Validation A: UNLOADED (Base Params)', fontsize=16)
-            for j in range(nb_joints):
-                joint_name = self.identif_config["active_joints"][j] if "active_joints" in self.identif_config else f"Joint {j}"
-                ax = axsA[j]
-                ax.plot(tau_corrected_A[:, j], label='Measured (x Gain)', color='blue', alpha=0.6)
-                ax.plot(tau_model_A[:, j], label='Identified Model', color='green', linestyle='--')
-                ax.set_title(f"Joint {j}: Gain = {k_vals[j]:.4f}")
-                ax.set_ylabel(f'{joint_name}\n(Nm)')
-                ax.grid(True, alpha=0.3)
-                if j == 0: ax.legend(loc='upper right')
-            
-            axsA[-1].set_xlabel('Samples')
-            plt.tight_layout()
-            plt.show()
-
-            # === PLOT 2: EXPERIMENT B (LOADED) ===
-            print("\n[Validation] Plotting Experiment B (Loaded)...")
-            tau_corrected_B = self.processed_data_B["torques"] * k_vals
-            tau_model_B_flat = W_B @ phi_r + tau_load_B
+            tau_corrected_B = self.processed_data_B["torques"] * k_tau_val
+            tau_model_B_flat = W_B @ phi_robot_val + tau_load_B
             tau_model_B = tau_model_B_flat.reshape((self.num_samples_B, nb_joints), order='F')
-
-            figB, axsB = plt.subplots(nb_joints, 1, figsize=(10, 3 * nb_joints), sharex=True)
-            figB.suptitle(f'Validation B: LOADED (Payload)', fontsize=16)
-
-            for j in range(nb_joints):
-                joint_name = self.identif_config["active_joints"][j] if "active_joints" in self.identif_config else f"Joint {j}"
-                ax = axsB[j]
-                ax.plot(tau_corrected_B[:, j], label='Measured (x Gain)', color='blue', alpha=0.6)
-                ax.plot(tau_model_B[:, j], label='Identified Model', color='red', linestyle='--')
-                ax.set_title(f"Joint {j}: Gain = {k_vals[j]:.4f}")
-                ax.set_ylabel(f'{joint_name}\n(Nm)')
-                ax.grid(True, alpha=0.3)
-                if j == 0: ax.legend(loc='upper right')
-
-            axsB[-1].set_xlabel('Samples')
-            plt.tight_layout()
-            plt.show()
+            tau_nominal_B_flat = W_B @ list(params_standard.values()) + tau_load_B
+            tau_nominal_B = tau_nominal_B_flat.reshape((self.num_samples_B, nb_joints), order='F')
+            plot_validation("LOADED (HEAVY)", tau_model_B, tau_corrected_B, k_tau_val, tau_nominal=tau_nominal_B)
             
-        # # --- 7. OLS INDEPENDENT CHECK ---
-        # print("\n[Sanity Check] Running Independent OLS for Exp A and B...")
-
-        # # Solve A (Unloaded)
-        # phi_ols_A = solve_LMI_OLS(W_A, self.processed_data_A["torques"].flatten(order='F'), nb_joints, list(params_standard.values()), 1.0)        
-        # tau_ols_A_flat = W_A @ phi_ols_A
-
-        # # Solve B (Loaded)
-        # phi_ols_B = solve_LMI_OLS(W_B, self.processed_data_B["torques"].flatten(order='F'), nb_joints, list(params_standard.values()), 1.0)        
-        # tau_ols_B_flat = W_B @ phi_ols_B
-         
-        # # --- 8. FANCY PLOTTING: Pinocchio vs Measured vs Identified ---
-        # if plotting:
-        #     import matplotlib.pyplot as plt
-        #     import matplotlib.gridspec as gridspec
+            tau_corrected_test = self.processed_data_test["torques"] * k_tau_val
+            tau_model_test_flat = W_test @ phi_robot_val
+            tau_model_test = tau_model_test_flat.reshape((self.num_samples_test, nb_joints), order='F')
+            tau_nominal_test_flat = W_test @ list(params_standard.values())
+            tau_nominal_test = tau_nominal_test_flat.reshape((self.num_samples_test, nb_joints), order='F')
             
-        #     # --- Helper to reshape flat vectors back to (Samples, Joints) ---
-        #     def reshape_to_joints(flat_vec, n_samples, n_joints):
-        #         return flat_vec.reshape((n_samples, n_joints), order='F')
-
-        #     # Prepare Data for Plotting
-        #     # A: Unloaded
-        #     tau_meas_A = reshape_to_joints(tau_A_flat, self.num_samples_A, nb_joints_partial)
-        #     tau_pin_A  = reshape_to_joints(tau_A_synthetic, self.num_samples_A, nb_joints_partial)
-        #     tau_id_A   = reshape_to_joints(tau_ols_A_flat, self.num_samples_A, nb_joints_partial)
-            
-        #     # B: Loaded
-        #     tau_meas_B = reshape_to_joints(tau_B_flat, self.num_samples_B, nb_joints_partial)
-        #     tau_pin_B  = reshape_to_joints(tau_B_synthetic, self.num_samples_B, nb_joints_partial)
-        #     tau_id_B   = reshape_to_joints(tau_ols_B_flat, self.num_samples_B, nb_joints_partial)
-
-        #     def plot_fancy_comparison(title, tau_pin, tau_meas, tau_id, joint_names):
-        #         n_j = len(joint_names)
-        #         fig = plt.figure(figsize=(12, 3 * n_j))
-        #         gs = gridspec.GridSpec(n_j, 1, figure=fig)
-        #         fig.suptitle(title, fontsize=16, fontweight='bold', y=0.99)
-                
-        #         colors = {'pin': '#2ca02c', 'meas': "#1f2eb4", 'id': '#d62728'} # Green, Blue, Red
-                
-        #         for j in range(n_j):
-        #             ax = fig.add_subplot(gs[j, 0])
-                    
-        #             # Plot lines with slightly different widths/styles to see overlaps
-        #             # 1. Measured (Thick, background)
-        #             ax.plot(tau_meas[:, j], color=colors['meas'], linewidth=1.5, alpha=0.3, label='Measured')
-                    
-        #             # 2. Pinocchio (Medium, solid)
-        #             ax.plot(tau_pin[:, j], color=colors['pin'], linewidth=1.5, linestyle='-', alpha=0.8, label='Nominal')
-                    
-        #             # 3. Identified OLS (Thin, dashed)
-        #             ax.plot(tau_id[:, j], color=colors['id'], linewidth=1.5, linestyle='--', label='Identified')
-                    
-        #             # Styling
-        #             ax.set_ylabel(f'{joint_names[j]}\nTorque (Nm)', fontsize=10, fontweight='bold')
-        #             ax.grid(True, which='both', linestyle='--', alpha=0.4)
-        #             ax.spines['top'].set_visible(False)
-        #             ax.spines['right'].set_visible(False)
-                    
-        #             # Error text (RMSE between Pinocchio and ID)
-        #             rmse = np.sqrt(np.mean((tau_pin[:, j] - tau_id[:, j])**2))
-        #             ax.text(0.02, 0.90, f'Fit RMSE: {rmse:.4f} Nm', transform=ax.transAxes, 
-        #                     fontsize=9, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
-
-        #             if j == 0:
-        #                 ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.25), ncol=3, frameon=False, fontsize=10)
-                    
-        #             if j == n_j - 1:
-        #                 ax.set_xlabel('Time Samples', fontsize=11)
-                
-        #         plt.tight_layout()
-        #         plt.subplots_adjust(top=0.92) # Make room for title/legend
-        #         plt.show()
-
-        #     # Active Joint Names
-        #     j_names = [self.identif_config["active_joints"][i] for i in range(nb_joints_partial)]
-                        
-        #     print("\n[Plotting] 1. OLS Check - Experiment A (Unloaded)")
-        #     plot_fancy_comparison("Sanity Check A: Unloaded Dynamics (OLS)", tau_pin_A, tau_meas_A, tau_id_A, j_names)
-            
-        #     print("\n[Plotting] 2. OLS Check - Experiment B (Loaded)")
-        #     plot_fancy_comparison("Sanity Check B: Loaded Dynamics (OLS)", tau_pin_B, tau_meas_B, tau_id_B, j_names)
+            plot_validation("TEST", tau_model_test, tau_corrected_test, k_tau_val, tau_nominal=tau_nominal_test)
         
-        return phi_r
+        return phi_robot_val

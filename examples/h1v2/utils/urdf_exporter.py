@@ -8,7 +8,6 @@ def save_identified_params_to_urdf(
     output_urdf_path,
     phi_robot,          # Your identified vector (numpy array)
     joint_names,        # List of joint names corresponding to phi_robot order
-    armature_vals,      # List of scalar armatures (must match joint_names order)
     save_offsets=True   # If True, saves joint offsets to <calibration> tag
 ):
     """
@@ -39,8 +38,8 @@ def save_identified_params_to_urdf(
             continue
             
         # --- A. Extract Parameters for this Joint ---
-        # Assuming 13-param standard vector: [m, hx, hy, hz, Ixx, Ixy, Iyy, Ixz, Iyz, Izz, Fv, Fs, Off]
-        base = i * 13
+        # Assuming 14-param standard vector: [m, hx, hy, hz, Ixx, Ixy, Iyy, Ixz, Iyz, Izz, Fv, Fs, Ia, Off]
+        base = i * 14
         m   = phi_robot[base + 0]
         h   = phi_robot[base + 1 : base + 4] # [mx, my, mz]
         I_O = np.array([
@@ -50,10 +49,9 @@ def save_identified_params_to_urdf(
         ])
         fv  = phi_robot[base + 10]
         fs  = phi_robot[base + 11]
-        off = phi_robot[base + 12]
+        armature = phi_robot[base + 12]
+        off = phi_robot[base + 13]
         
-        armature = armature_vals[i]
-
         # --- B. Update Link Inertial (Mass & CoM) ---
         child_link_name = joint.find('child').get('link')
         child_link = None

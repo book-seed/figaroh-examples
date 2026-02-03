@@ -42,7 +42,7 @@ def main():
     ps = h1v2_iden.identif_config
     
     ps["active_joints"] = ['left_shoulder_pitch_joint', 'left_shoulder_roll_joint', 'left_shoulder_yaw_joint', 'left_elbow_joint', 'left_wrist_roll_joint', 'left_wrist_pitch_joint', 'left_wrist_yaw_joint']
-    
+        
     # Joint parameters
     ps["act_Jid"] = [h1v2_iden.model.getJointId(i) for i in ps["active_joints"]]
     ps["act_J"] = [h1v2_iden.model.joints[jid] for jid in ps["act_Jid"]]
@@ -58,25 +58,35 @@ def main():
 
     # Dataset paths
     data_pathes_A = {}
-    data_pathes_A["pos_data"] = "data/identification/real/exp_A/hardware/h1_position.csv"
-    data_pathes_A["vel_data"] = "data/identification/real/exp_A/hardware/h1_velocity.csv"
-    data_pathes_A["torque_data"] = "data/identification/real/exp_A/hardware/h1_effort.csv"
+    data_pathes_A["pos_data"] = "data/identification/dual_mass/exp_A/hardware/h1_position.csv"
+    data_pathes_A["vel_data"] = "data/identification/dual_mass/exp_A/hardware/h1_velocity.csv"
+    data_pathes_A["torque_data"] = "data/identification/dual_mass/exp_A/hardware/h1_effort.csv"
     data_pathes_B = {}
-    data_pathes_B["pos_data"] = "data/identification/real/exp_B/hardware/h1_position.csv"
-    data_pathes_B["vel_data"] = "data/identification/real/exp_B/hardware/h1_velocity.csv"
-    data_pathes_B["torque_data"] = "data/identification/real/exp_B/hardware/h1_effort.csv"
+    data_pathes_B["pos_data"] = "data/identification/dual_mass/exp_B/hardware/h1_position.csv"
+    data_pathes_B["vel_data"] = "data/identification/dual_mass/exp_B/hardware/h1_velocity.csv"
+    data_pathes_B["torque_data"] = "data/identification/dual_mass/exp_B/hardware/h1_effort.csv"
+    data_pathes_test = {}
+    data_pathes_test["pos_data"] = "data/identification/dual_mass/exp_test/hardware/h1_position.csv"
+    data_pathes_test["vel_data"] = "data/identification/dual_mass/exp_test/hardware/h1_velocity.csv"
+    data_pathes_test["torque_data"] = "data/identification/dual_mass/exp_test/hardware/h1_effort.csv"
     
     # Load data
-    ps["mass_load"] = 2.549
+    ps["mass_load_A"] = 0.974
+    ps["mass_load_B"] = 2.591
     ps["which_body_loaded"] = h1v2_iden.model.getJointId('left_wrist_yaw_joint')
 
-    h1v2_iden.initialize_global(data_pathes_A, data_pathes_B, truncate_A=(int(14.8/0.002), int(54/0.002)), truncate_B=(int(12/0.002), int(54/0.002)))
+    h1v2_iden.initialize_global(data_pathes_A, 
+                                data_pathes_B, 
+                                data_pathes_test, 
+                                truncate_A=(int(23.4/0.002), int(66.4/0.002)), 
+                                truncate_B=(int(12/0.002), int(54/0.002)),
+                                truncate_test=(int(15.10/0.002), int(45.6/0.002)))
 
     # Solve identification
     phi_r = h1v2_iden.solve_global(plotting=True, save_results=True)
     
     # Export the new URDF
-    save_identified_params_to_urdf("urdf/h1_2_handless.urdf", "urdf/identified_h1_2_handless.urdf", phi_r, ps["active_joints"], ps["armatures"], True)
+    save_identified_params_to_urdf("urdf/h1_2_handless.urdf", "urdf/identified_h1_2_handless.urdf", phi_r, ps["active_joints"], True)
 
 
 if __name__ == "__main__":
