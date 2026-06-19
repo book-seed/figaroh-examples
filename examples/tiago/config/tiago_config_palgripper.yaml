@@ -22,8 +22,8 @@ calibration:
   tip_pose: [0.0146, -0.0, 0.35162, -1.57, 0.0,  -1.57]
   coeff_regularize: 0.01
   outlier_eps: 0.05 #meter
-  data_file: data/eye_hand_calibration_recorded_data_palgripper_11_test1.csv
-  sample_configs_file: data/optimal_configs/tiago_calibration_joint_configurations_500_pmb2_gripper.yaml
+  # data_file: data/eye_hand_calibration_recorded_data_palgripper_11_test1.csv  # FIXME: data file not available
+  # sample_configs_file: data/optimal_configs/tiago_calibration_joint_configurations_500_pmb2_gripper.yaml  # FIXME: data file not available
   nb_sample: 500
 identification:
   robot_params:

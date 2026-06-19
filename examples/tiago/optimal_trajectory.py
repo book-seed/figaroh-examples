@@ -20,7 +20,7 @@ if str(project_root) not in sys.path:
 
 from matplotlib import pyplot as plt
 from figaroh.tools.robot import load_robot
-from examples.tiago.utils.simplified_colission_model import build_tiago_simplified
+from examples.tiago.utils.simplified_collision_model import build_tiago_simplified
 from examples.tiago.utils.tiago_tools import OptimalTrajectoryIPOPT
 
 

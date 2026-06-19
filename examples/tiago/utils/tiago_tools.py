@@ -39,11 +39,6 @@ from figaroh.utils.results_manager import ResultsManager
 from figaroh.utils.error_handling import handle_calibration_errors
 
 
-def validate_robot_config(config):
-    """Validate robot configuration."""
-    return True
-
-
 class TiagoCalibration(BaseCalibration):
     """
     Class for calibrating the TIAGo robot.

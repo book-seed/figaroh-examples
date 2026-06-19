@@ -125,16 +125,28 @@ class TestBackwardCompatibility:
         legacy_config = {
             'robot_params': [{
                 'q_lim_def': 1.57,
+                'dq_lim_def': 1.0,
                 'fv': [0.1, 0.12, 0.08, 0.15, 0.09, 0.11],
                 'fs': [0.05, 0.04, 0.06, 0.07, 0.04, 0.05],
-                'Ia': [0.001, 0.002, 0.0015, 0.0018, 0.001, 0.0012]
+                'Ia': [0.001, 0.002, 0.0015, 0.0018, 0.001, 0.0012],
+                'offset': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                'Iam6': 0,
+                'fvm6': 0,
+                'fsm6': 0,
+                'reduction_ratio': [50.0, 50.0, 50.0, 30.0, 30.0, 30.0],
+                'ratio_essential': 30.0
             }],
             'problem_params': [{
                 'is_external_wrench': False,
                 'is_joint_torques': True,
                 'has_friction': True,
                 'has_base': False,
-                'friction_model': 'viscous_coulomb'
+                'friction_model': 'viscous_coulomb',
+                'force_torque': None,
+                'external_wrench_offsets': False,
+                'has_actuator_inertia': False,
+                'has_joint_offset': False,
+                'has_coupled_wrist': False
             }],
             'processing_params': [{
                 'ts': 0.001,
@@ -145,7 +157,9 @@ class TestBackwardCompatibility:
             }],
             'tls_params': [{
                 'nb_sample': 100,
-                'method': 'iterative'
+                'method': 'iterative',
+                'mass_load': 0.0,
+                'which_body_loaded': 0.0
             }]
         }        # Test parsing
         try:
@@ -268,6 +282,12 @@ class TestBackwardCompatibility:
                     'problem': {
                         'has_friction': True,
                         'has_external_forces': False
+                    },
+                    'signal_processing': {
+                        'sampling_frequency': 1000.0,
+                        'cutoff_frequency': 50.0,
+                        'filter_type': 'butterworth',
+                        'differentiation_method': 'gradient'
                     },
                     'data': {
                         'sampling_rate': 1000.0,

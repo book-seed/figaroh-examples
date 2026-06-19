@@ -314,7 +314,7 @@ examples/tiago/
 ├── optimal_trajectory.py   # Refactored optimal trajectory
 ├── utils/
 │   ├── tiago_tools.py                 # All TIAGo-specific classes
-│   ├── simplified_colission_model.py  # Collision geometry
+│   ├── simplified_collision_model.py  # Collision geometry
 │   └── cubic_spline.py                # Trajectory generation
 ├── config/
 │   ├── tiago_config.yaml             # Main configuration

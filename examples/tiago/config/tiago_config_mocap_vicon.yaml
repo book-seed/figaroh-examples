@@ -22,8 +22,8 @@ calibration:
   tip_pose: None
   coeff_regularize: 0.01
   outlier_eps: 0.05 #meter
-  data_file: data/calibration/mocap/vicon/relative_encoder/vicon_calibration_fc10_gripper3_base2.csv
-  sample_configs_file: data/optimal_configs/
+  # data_file: data/calibration/mocap/vicon/relative_encoder/vicon_calibration_fc10_gripper3_base2.csv  # FIXME: data file not available
+  # sample_configs_file: data/optimal_configs/  # FIXME: directory not available
   nb_sample: 500
 identification:
   robot_params:

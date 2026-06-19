@@ -31,78 +31,78 @@ if str(project_root) not in sys.path:
 from examples.ur10.utils.ur10_tools import UR10Identification
 from figaroh.tools.robot import load_robot
 
+def main():
+    """Main function for UR10 dynamic parameter identification."""
 
-# def main():
-# """Main function for UR10 dynamic parameter identification."""
+    # Load UR10 robot model
 
-# Load UR10 robot model
-ur10 = load_robot(
-    "urdf/ur10_robot.urdf",
-    package_dirs="../../models",
-    load_by_urdf=True,
-)
+    ur10 = load_robot(
+        "urdf/ur10_robot.urdf",
+        package_dirs="../../models",
+        load_by_urdf=True,
+    )
 
-# Create identification object
-ur10_identif = UR10Identification(
-    robot=ur10,
-    config_file="config/ur10_unified_config.yaml"
-)
-ps = ur10_identif.identif_config
-ps["active_joints"] = [
-    "shoulder_pan_joint",
-    "shoulder_lift_joint", 
-    "elbow_joint",
-    "wrist_1_joint",
-    "wrist_2_joint",
-    "wrist_3_joint"
-]
-# Joint parameters
-ps["act_Jid"] = [
-    ur10_identif.model.getJointId(i) for i in ps["active_joints"]
-]
-ps["act_J"] = [ur10_identif.model.joints[jid] for jid in ps["act_Jid"]]
-ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
-ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
+    # Create identification object
+    ur10_identif = UR10Identification(
+        robot=ur10,
+        config_file="config/ur10_unified_config.yaml"
+    )
+    ps = ur10_identif.identif_config
+    ps["active_joints"] = [
+        "shoulder_pan_joint",
+        "shoulder_lift_joint", 
+        "elbow_joint",
+        "wrist_1_joint",
+        "wrist_2_joint",
+        "wrist_3_joint"
+    ]
+    # Joint parameters
+    ps["act_Jid"] = [
+        ur10_identif.model.getJointId(i) for i in ps["active_joints"]
+    ]
+    ps["act_J"] = [ur10_identif.model.joints[jid] for jid in ps["act_Jid"]]
+    ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
+    ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
 
-# Initialize with data processing
-ur10_identif.initialize()
+    # Initialize with data processing
+    ur10_identif.initialize()
 
-# Perform identification using the base class solve method
-ur10_identif.solve(
-    decimate=False,
-    plotting=True,
-    save_results=False,
-)
+    # Perform identification using the base class solve method
+    ur10_identif.solve(
+        decimate=False,
+        plotting=True,
+        save_results=False,
+    )
 
-# Display results
-# Print results summary
-print("\n" + "=" * 60)
-print("UR10 DYNAMIC PARAMETER IDENTIFICATION RESULTS")
-print("=" * 60)
+    # Display results
+    # Print results summary
+    print("\n" + "=" * 60)
+    print("UR10 DYNAMIC PARAMETER IDENTIFICATION RESULTS")
+    print("=" * 60)
 
-print(
-    f"Number of base parameters identified: "
-    f"{len(ur10_identif.params_base)}"
-)
-print(f"Correlation coefficient: {ur10_identif.correlation:.4f}")
+    print(
+        f"Number of base parameters identified: "
+        f"{len(ur10_identif.params_base)}"
+    )
+    print(f"Correlation coefficient: {ur10_identif.correlation:.4f}")
 
-if hasattr(ur10_identif, 'result'):
-    for key, value in ur10_identif.result.items():
-        if isinstance(value, (int, float)):
-            if isinstance(value, float):
-                print(f"{key}: {value:.6f}")
+    if hasattr(ur10_identif, 'result'):
+        for key, value in ur10_identif.result.items():
+            if isinstance(value, (int, float)):
+                if isinstance(value, float):
+                    print(f"{key}: {value:.6f}")
+                else:
+                    print(f"{key}: {value}")
             else:
-                print(f"{key}: {value}")
-        else:
-            print(f"{key}: {type(value).__name__} of length {len(value)}")
+                print(f"{key}: {type(value).__name__} of length {len(value)}")
 
-print("\nBase parameters:")
-for i, param_name in enumerate(ur10_identif.params_base):
-    print(f"{i + 1:2d}. {param_name}: {ur10_identif.phi_base[i]:10.6f}")
+    print("\nBase parameters:")
+    for i, param_name in enumerate(ur10_identif.params_base):
+        print(f"{i + 1:2d}. {param_name}: {ur10_identif.phi_base[i]:10.6f}")
 
-print("\nIdentification completed successfully!")
-# return ur10_identif
+    print("\nIdentification completed successfully!")
+    return ur10_identif
 
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()

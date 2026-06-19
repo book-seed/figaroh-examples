@@ -43,7 +43,19 @@ for i in range(len(total_list)):
     zero_list = [*zero_list, *total_list[i]]
 
 
-def update_parameters(model, res, calib_config):
+def update_parameters(model, res=None, calib_config=None):
+    # If no res provided, load from saved calibration results
+    if res is None:
+        data_path = join(
+            dirname(abspath(__file__)), "data", "calibration_results.npz"
+        )
+        if not os.path.exists(data_path):
+            raise FileNotFoundError(
+                f"Calibration results not found at {data_path}. "
+                "Run calibration_upperbody.py first."
+            )
+        data = np.load(data_path)
+        res = data["result"]
 
     param_list = np.zeros((calib_config["NbJoint"], 6))
 
@@ -89,7 +101,7 @@ def update_parameters(model, res, calib_config):
     param_list[7, 3] = res[30]
     param_list[7, 5] = res[31]
 
-    joint_names = [name for i, name in enumerate(model.names)]
+    joint_names = [name for i, name in enumerate(model.model.names)]
     offset_name = [
         "_x_offset",
         "_y_offset",
@@ -99,7 +111,7 @@ def update_parameters(model, res, calib_config):
         "_yaw_offset",
     ]
     path_save_xacro = join(
-        dirname(dirname(str(abspath(__file__)))), f"data/offset.xacro"
+        dirname(str(abspath(__file__))), f"data/offset.xacro"
     )
     with open(path_save_xacro, "w") as output_file:
         for i in range(calib_config["NbJoint"]):
@@ -111,7 +123,7 @@ def update_parameters(model, res, calib_config):
                 )
                 output_file.write(update_line)
                 output_file.write("\n")
-    path_save_yaml = join(dirname(dirname(str(abspath(__file__)))), f"data/offset.yaml")
+    path_save_yaml = join(dirname(str(abspath(__file__))), f"data/offset.yaml")
     with open(path_save_yaml, "w") as output_file:
         for i in range(calib_config["NbJoint"]):
             for j in range(6):
@@ -122,18 +134,43 @@ def update_parameters(model, res, calib_config):
                 output_file.write("\n")
 
 
-############################################################
-# # path_save_ep = join(
-# #     dirname(dirname(str(abspath(__file__)))),
-# #     f"data/talos/0403_estimation_result.csv")
-# # with open(path_save_ep, "w") as output_file:
-# #     w = csv.writer(output_file)
-# #     for i in range(nvars):
-# #         w.writerow(
-# #             [
-# #                 params_name[i],
-# #                 LM_solve.x[i],
-# #                 std_dev[i],
-# #                 std_pctg[i]
-# #             ]
-# #         )
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+
+    # Add project root to path for imports
+    project_root = Path(__file__).parents[2]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+    import logging
+
+    logging.basicConfig(level=logging.CRITICAL)
+
+    from figaroh.tools.robot import load_robot
+    from examples.talos.utils.talos_tools import TALOSCalibration
+
+    # Path to the directory containing this script
+    script_dir = dirname(abspath(__file__))
+
+    # Load robot model
+    print("Loading robot model...")
+    robot = load_robot(
+        "urdf/talos_full_v2.urdf",
+        package_dirs="../../models",
+        load_by_urdf=True,
+    )
+
+    # Load calibration configuration
+    print("Loading calibration configuration...")
+    calibration = TALOSCalibration(
+        robot=robot,
+        config_file=join(script_dir, "config/talos_unified_config.yaml"),
+    )
+
+    # Update model parameters (res will be auto-loaded from file)
+    print("Updating model parameters...")
+    update_parameters(robot, calib_config=calibration.calib_config)
+    print("Model parameters updated successfully.")
+    print(f"  - data/offset.xacro")
+    print(f"  - data/offset.yaml")

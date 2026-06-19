@@ -24,7 +24,10 @@ torso-arm kinematic chain using experimental data.
 
 import logging
 import sys
+from os.path import dirname, join, abspath
 from pathlib import Path
+
+import numpy as np
 
 # Configure logging at application entry point
 logging.basicConfig(
@@ -41,12 +44,11 @@ from figaroh.tools.robot import load_robot
 from examples.talos.utils.talos_tools import TALOSCalibration
 
 
-def main(data_type="experimental", visualization=True, verbose=True):
+def main(visualization=True, verbose=True):
     """
     Main function for TALOS torso-arm calibration.
     
     Args:
-        data_type (str): Type of data to use ('experimental' or 'sample')
         visualization (bool): Whether to show visualization plots
         verbose (bool): Whether to enable verbose output
     """
@@ -57,7 +59,7 @@ def main(data_type="experimental", visualization=True, verbose=True):
     # Load robot
     robot = load_robot(
         "urdf/talos_full_v2.urdf",
-        package_dirs="models",
+        package_dirs="../../models",
         load_by_urdf=True,
     )
     
@@ -78,13 +80,20 @@ def main(data_type="experimental", visualization=True, verbose=True):
     print("Running calibration optimization...")
     print("=" * 40)
     
-    calibration.solve(
+    result = calibration.solve(
         method="lm",
         max_iterations=3,
         outlier_threshold=3.0,
         enable_logging=verbose,
         plotting=True
     )
+    
+    # Save calibration results for use by update_model.py
+    np.savez(
+        join(dirname(abspath(__file__)), "data", "calibration_results.npz"),
+        result=result.x,
+    )
+    print(f"Calibration results saved to data/calibration_results.npz")
     
     # Display calibration parameters
     param_count = len(calibration.calib_config['param_name'])
@@ -96,7 +105,6 @@ def main(data_type="experimental", visualization=True, verbose=True):
 if __name__ == "__main__":
     try:
         main(
-            data_type="experimental",
             visualization=True,
             verbose=False
         )

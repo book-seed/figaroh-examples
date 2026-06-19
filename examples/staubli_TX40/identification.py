@@ -42,7 +42,7 @@ def main():
     """Main function for TX40 dynamic parameter identification."""
     # Load robot model
     robot = load_robot(
-        "urdf/tx40_mdh_modified.urdf", package_dirs="models"
+        "urdf/tx40_mdh_modified.urdf", package_dirs="../../models"
     )
 
     # Create TX40 identification object

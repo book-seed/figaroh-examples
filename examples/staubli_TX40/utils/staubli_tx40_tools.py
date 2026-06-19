@@ -32,19 +32,8 @@ from figaroh.utils.error_handling import (
     RobotInitializationError,
     DataProcessingError
 )
-# Import from shared modules if needed
-try:
-    from ...shared.config_manager import ConfigManager
-except ImportError:
-    # Create simple fallback if config manager not available
-    class ConfigManager:
-        def __init__(self, config_path):
-            import yaml
-            with open(config_path, 'r') as f:
-                self.config = yaml.safe_load(f)
-        
-        def get_config(self):
-            return self.config
+# Import yaml for config loading
+import yaml
 
 from figaroh.tools.regressor import build_regressor_basic
 from figaroh.identification.identification_tools import (
@@ -63,7 +52,7 @@ class TX40Identification(BaseIdentification):
             config_file: Path to TX40 configuration YAML file
         """
         super().__init__(robot, config_file)
-        print("TiagoIdentification initialized for TIAGo robot")
+        print("TX40Identification initialized for TX40 robot")
         
         # TX40-specific active joints
         self.active_joints = [
@@ -488,40 +477,4 @@ class TX40Identification(BaseIdentification):
         
         return np.around(relative_std, 2)
     
-    def _save_tx40_parameters(self):
-        """Save TX40-specific parameters to CSV files."""
-        try:
-            import csv
-            from os.path import join, dirname, abspath
-            
-            # Save base parameters
-            path_save_bp = join(
-                dirname(dirname(str(abspath(__file__)))),
-                "results/TX40_base_params.csv"
-            )
-            
-            with open(path_save_bp, "w") as output_file:
-                w = csv.writer(output_file)
-                w.writerow([
-                    "Parameter", "OLS_Value", "OLS_Std%",
-                    "WLS_Value", "WLS_Std%"
-                ])
-                for i in range(len(self.params_base)):
-                    ols_std = getattr(
-                        self, '_ols_std', [0] * len(self.params_base)
-                    )[i]
-                    wls_std = getattr(
-                        self, '_wls_std', [0] * len(self.params_base)
-                    )[i]
-                    w.writerow([
-                        self.params_base[i],
-                        self.phi_base[i],
-                        ols_std,
-                        self.phi_base[i],
-                        wls_std
-                    ])
-            
-            print(f"TX40 base parameters saved to {path_save_bp}")
-            
-        except Exception as e:
-            print(f"Error saving TX40 parameters: {e}")
+

@@ -290,7 +290,7 @@ cat > "$NEW_DIR/utils/__init__.py" << 'EOF'
 Utility functions and classes for ROBOT_TITLE examples.
 """
 
-__all__ = ['robot_lower_tools', 'simplified_colission_model']
+__all__ = ['robot_lower_tools', 'simplified_collision_model']
 EOF
 
 replace_robot_name "$(cat "$NEW_DIR/utils/__init__.py")" > "$NEW_DIR/utils/__init__.py.tmp"
@@ -378,7 +378,7 @@ EOF
 replace_robot_name "$(cat "$NEW_DIR/utils/${ROBOT_NAME_LOWER}_tools.py")" > "$NEW_DIR/utils/${ROBOT_NAME_LOWER}_tools.py.tmp"
 mv "$NEW_DIR/utils/${ROBOT_NAME_LOWER}_tools.py.tmp" "$NEW_DIR/utils/${ROBOT_NAME_LOWER}_tools.py"
 
-cat > "$NEW_DIR/utils/simplified_colission_model.py" << 'EOF'
+cat > "$NEW_DIR/utils/simplified_collision_model.py" << 'EOF'
 """
 Simplified collision model for ROBOT_TITLE robot.
 
@@ -414,8 +414,8 @@ def build_robot_lower_simplified(robot: Robot):
     return robot
 EOF
 
-replace_robot_name "$(cat "$NEW_DIR/utils/simplified_colission_model.py")" > "$NEW_DIR/utils/simplified_colission_model.py.tmp"
-mv "$NEW_DIR/utils/simplified_colission_model.py.tmp" "$NEW_DIR/utils/simplified_colission_model.py"
+replace_robot_name "$(cat "$NEW_DIR/utils/simplified_collision_model.py")" > "$NEW_DIR/utils/simplified_collision_model.py.tmp"
+mv "$NEW_DIR/utils/simplified_collision_model.py.tmp" "$NEW_DIR/utils/simplified_collision_model.py"
 
 print_success "Utils module created!"
 
@@ -540,7 +540,7 @@ robot_lower/
 └── utils/                      # Utility functions
     ├── __init__.py
     ├── robot_lower_tools.py
-    └── simplified_colission_model.py
+    └── simplified_collision_model.py
 ```
 
 ## Quick Start
@@ -623,7 +623,7 @@ Edit `config/robot_lower_config.yaml` to customize:
 
 The `utils/` directory contains robot-specific helpers:
 - `robot_lower_tools.py`: Custom tools and optimization classes
-- `simplified_colission_model.py`: Collision model for trajectory planning
+- `simplified_collision_model.py`: Collision model for trajectory planning
 
 ## Data Format
 
@@ -805,7 +805,7 @@ print(f"Loaded robot with {robot.nq} DOF")
    - Update `load_robot_model()` with correct parameters
    - Implement `OptimalTrajectoryIPOPT` if needed
    
-2. Edit `utils/simplified_colission_model.py`:
+2. Edit `utils/simplified_collision_model.py`:
    - Implement simplified collision geometry if doing trajectory optimization
 
 ### Step 4: Collect Data
@@ -915,7 +915,7 @@ print_info "What's been created:"
 echo "  ✓ Directory structure (config/, data/, urdf/, utils/, docs/)"
 echo "  ✓ Python example files (calibration.py, identification.py, etc.)"
 echo "  ✓ Configuration files (robot_lower_config.yaml)"
-echo "  ✓ Utility modules (robot_lower_tools.py, simplified_colission_model.py)"
+echo "  ✓ Utility modules (robot_lower_tools.py, simplified_collision_model.py)"
 echo "  ✓ Documentation (README.md, SETUP_GUIDE.md)"
 echo "  ✓ Data format guides"
 echo ""

@@ -103,7 +103,7 @@ def main():
 
     # Print results summary
     print("\n" + "=" * 60)
-    print("TX40 DYNAMIC PARAMETER IDENTIFICATION RESULTS")
+    print("TIAGo DYNAMIC PARAMETER IDENTIFICATION RESULTS")
     print("=" * 60)
 
     print(

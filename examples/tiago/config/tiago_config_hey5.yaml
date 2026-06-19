@@ -22,8 +22,7 @@ calibration:
   tip_pose: [0.2163, 0.03484, 0.004, 0.0, -1.57, -1.57]
   coeff_regularize: 0.000
   outlier_eps: 0.05 #meter
-  # data_file: data/eye_hand_calibration_recorded_data_palhey5_17_test1.csv
-  data_file: data/
+  data_file: data/calibration/mocap/qualysis_base_hand_calibration.csv
   sample_configs_file: data/calibration/optimal_configurations/tiago_calibration_joint_configurations_500_pmb2_hey5.yaml
   nb_sample: 500
 identification:
