@@ -17,18 +17,18 @@ try:
     from figaroh.optimal.base_optimal_trajectory import BaseOptimalTrajectory
     from figaroh.utils.results_manager import ResultsManager
     from figaroh.utils.error_handling import (
-        CalibrationError, 
+        CalibrationError,
         IdentificationError,
-        handle_calibration_errors
+        handle_calibration_errors,
     )
-    
+
     # Import shared modules that are still only in examples
     from .shared import (
         ConfigurationManager,
         BaseParameterComputer,
         TrajectoryConstraintManager,
         ConfigManager,
-        DataProcessor
+        DataProcessor,
     )
 except ImportError:
     # Graceful fallback if modules are not available
@@ -38,12 +38,12 @@ __version__ = "0.1.0"
 __author__ = "Thanh Nguyen"
 
 __all__ = [
-    'BaseIdentification',
-    'BaseOptimalCalibration',
-    'BaseOptimalTrajectory',
-    'SOCPOptimizer',
-    'Detmax',
-    'ConfigurationManager',
-    'BaseParameterComputer',
-    'TrajectoryConstraintManager'
+    "BaseIdentification",
+    "BaseOptimalCalibration",
+    "BaseOptimalTrajectory",
+    "SOCPOptimizer",
+    "Detmax",
+    "ConfigurationManager",
+    "BaseParameterComputer",
+    "TrajectoryConstraintManager",
 ]

@@ -23,6 +23,7 @@ from figaroh.calibration.calibration_tools import (
     calc_updated_fkm,
     initialize_variables,
 )
+
 # Import base class from figaroh
 from figaroh.calibration.base_calibration import BaseCalibration
 
@@ -104,7 +105,7 @@ class TALOSCalibration(BaseCalibration):
         # TALOS-specific regularization
         # Exclude base position (first 3 params) and markers (last 3*NbMarkers)
         n_markers = self.calib_config["NbMarkers"]
-        regularization_params = var[6:-n_markers * 3]
+        regularization_params = var[6 : -n_markers * 3]
         regularization_term = (
             np.sqrt(self.regularization_coefficient) * regularization_params
         )

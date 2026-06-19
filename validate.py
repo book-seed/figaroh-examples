@@ -53,19 +53,26 @@ EXAMPLE_SCRIPTS = {
 
 # --- Helpers -------------------------------------------------------------
 
+
 class Result:
     """Track pass/fail/skip/timeout for a single check."""
+
     def __init__(self, name, category):
         self.name = name
         self.category = category  # "test" or "script"
-        self.status = "unknown"   # pass, fail, skip, timeout
+        self.status = "unknown"  # pass, fail, skip, timeout
         self.duration = 0.0
         self.output = ""
         self.error = ""
 
     def __repr__(self):
-        icon = {"pass": "PASS", "fail": "FAIL", "skip": "SKIP",
-                "timeout": "TIMEOUT", "unknown": "?"}[self.status]
+        icon = {
+            "pass": "PASS",
+            "fail": "FAIL",
+            "skip": "SKIP",
+            "timeout": "TIMEOUT",
+            "unknown": "?",
+        }[self.status]
         return f"[{icon}] {self.category}/{self.name} ({self.duration:.1f}s)"
 
 
@@ -240,16 +247,20 @@ def print_summary(test_results, script_results):
             print(f"    {r}")
 
     # Totals
-    print(f"\n  Total: {counts['pass']} passed, {counts['fail']} failed, "
-          f"{counts['skip']} skipped, {counts['timeout']} timed out")
+    print(
+        f"\n  Total: {counts['pass']} passed, {counts['fail']} failed, "
+        f"{counts['skip']} skipped, {counts['timeout']} timed out"
+    )
 
     # Final verdict
     print("\n" + "-" * 70)
     if counts["fail"] > 0:
         print(f"  RESULT: FAIL ({counts['fail']} failure(s))")
     elif counts["timeout"] > 0:
-        print(f"  RESULT: PASS WITH TIMEOUTS ({counts['timeout']} timed out — "
-              "likely IPOPT optimization, not a bug)")
+        print(
+            f"  RESULT: PASS WITH TIMEOUTS ({counts['timeout']} timed out — "
+            "likely IPOPT optimization, not a bug)"
+        )
     else:
         print("  RESULT: ALL PASS")
     print("-" * 70)
@@ -259,24 +270,30 @@ def print_summary(test_results, script_results):
 
 # --- Main ----------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Validate figaroh-examples: run tests and example scripts."
     )
     parser.add_argument(
-        "--tests-only", action="store_true",
+        "--tests-only",
+        action="store_true",
         help="Run pytest only, skip example scripts.",
     )
     parser.add_argument(
-        "--scripts-only", action="store_true",
+        "--scripts-only",
+        action="store_true",
         help="Run example scripts only, skip pytest.",
     )
     parser.add_argument(
-        "--robot", type=str, default=None,
+        "--robot",
+        type=str,
+        default=None,
         help="Run scripts for a single robot (ur10, tiago, talos, staubli_tx40).",
     )
     parser.add_argument(
-        "--quick", action="store_true",
+        "--quick",
+        action="store_true",
         help="Skip slow scripts (optimal_config, optimal_trajectory).",
     )
     args = parser.parse_args()

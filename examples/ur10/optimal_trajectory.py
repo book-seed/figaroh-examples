@@ -26,21 +26,28 @@ project_root = Path(__file__).parents[2]
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from examples.ur10.utils.ur10_tools import (
-    OptimalTrajectoryIPOPT
-)
+from examples.ur10.utils.ur10_tools import OptimalTrajectoryIPOPT
 from figaroh.tools.robot import load_robot
 
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="UR10 optimal trajectory generation")
-    parser.add_argument("--config", type=str, default="config/ur10_unified_config.yaml",
-                        help="Path to unified config YAML file")
-    parser.add_argument("--urdf", type=str, default="urdf/ur10_robot.urdf",
-                        help="Path to robot URDF file")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Enable verbose (INFO) logging")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config/ur10_unified_config.yaml",
+        help="Path to unified config YAML file",
+    )
+    parser.add_argument(
+        "--urdf",
+        type=str,
+        default="urdf/ur10_robot.urdf",
+        help="Path to robot URDF file",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose (INFO) logging"
+    )
     return parser.parse_args()
 
 
@@ -72,16 +79,15 @@ def main(args: argparse.Namespace) -> None:
 
         # Create optimal trajectory object
         ur10_traj = OptimalTrajectoryIPOPT(
-            robot=ur10, active_joints=active_joints,
+            robot=ur10,
+            active_joints=active_joints,
             config_file=args.config,
         )
         ps = ur10_traj.identif_config
 
         # Joint parameters
         ps["active_joints"] = active_joints
-        ps["act_Jid"] = [
-            ur10_traj.model.getJointId(i) for i in ps["active_joints"]
-        ]
+        ps["act_Jid"] = [ur10_traj.model.getJointId(i) for i in ps["active_joints"]]
         ps["act_J"] = [ur10_traj.model.joints[jid] for jid in ps["act_Jid"]]
         ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
         ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
@@ -98,7 +104,9 @@ def main(args: argparse.Namespace) -> None:
             # Plot and save results
             ur10_traj.plot_results()
         else:
-            print("Failed to generate optimal trajectory. Check constraints and parameters.")
+            print(
+                "Failed to generate optimal trajectory. Check constraints and parameters."
+            )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         raise

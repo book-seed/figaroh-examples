@@ -3,7 +3,7 @@
 
 robot:
   type: "tiago_specific"
-  
+
 tasks:
   calibration:
     parameters:

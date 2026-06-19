@@ -125,9 +125,7 @@ def test_script_subprocess(robot_dir: str, script_name: str, timeout: int) -> No
             env=env,
         )
     except subprocess.TimeoutExpired:
-        pytest.fail(
-            f"Script {robot_dir}/{script_name} timed out after {timeout}s"
-        )
+        pytest.fail(f"Script {robot_dir}/{script_name} timed out after {timeout}s")
 
     assert result.returncode == 0, (
         f"Script {robot_dir}/{script_name} failed "

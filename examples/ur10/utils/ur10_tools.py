@@ -28,6 +28,7 @@ from figaroh.calibration.calibration_tools import (
     load_data,
     calc_updated_fkm,
 )
+
 # Import base classes from figaroh
 from figaroh.calibration.base_calibration import BaseCalibration
 from figaroh.identification.base_identification import BaseIdentification
@@ -37,7 +38,7 @@ from figaroh.utils.error_handling import (
     CalibrationError,
     IdentificationError,
     validate_robot_config,
-    handle_calibration_errors
+    handle_calibration_errors,
 )
 from figaroh.identification.identification_tools import (
     get_param_from_yaml as get_identification_param_from_yaml,
@@ -76,8 +77,12 @@ class UR10Calibration(BaseCalibration):
     """
 
     @handle_calibration_errors
-    def __init__(self, robot: Any, config_file: str = "config/ur10_config.yaml",
-                 del_list: List[int] | None = None) -> None:
+    def __init__(
+        self,
+        robot: Any,
+        config_file: str = "config/ur10_config.yaml",
+        del_list: List[int] | None = None,
+    ) -> None:
         """Initialize UR10 calibration with robot model and configuration.
 
         Args:
@@ -102,8 +107,9 @@ class UR10Calibration(BaseCalibration):
             Weighted residual vector including regularization terms
         """
         coeff_ = self.calib_config["coeff_regularize"]
-        PEEe = calc_updated_fkm(self.model, self.data, var,
-                                self.q_measured, self.calib_config)
+        PEEe = calc_updated_fkm(
+            self.model, self.data, var, self.q_measured, self.calib_config
+        )
 
         # Main residual: difference between measured and estimated poses
         raw_residuals = self.PEE_measured - PEEe
@@ -111,7 +117,8 @@ class UR10Calibration(BaseCalibration):
         # Apply unit-aware weighting using BaseCalibration utility method
         # This handles position (meters) vs orientation (radians) properly
         weighted_residuals = self.apply_measurement_weighting(
-            raw_residuals, pos_weight=1.0, orient_weight=0.5)
+            raw_residuals, pos_weight=1.0, orient_weight=0.5
+        )
 
         # Regularization term for intermediate parameters (excludes base/tip)
         # This helps stabilize optimization for UR10's 6-DOF kinematic chain
@@ -129,7 +136,9 @@ class UR10Calibration(BaseCalibration):
 class UR10Identification(BaseIdentification):
     """UR10-specific dynamic parameter identification class."""
 
-    def __init__(self, robot: Any, config_file: str = "config/ur10_config.yaml") -> None:
+    def __init__(
+        self, robot: Any, config_file: str = "config/ur10_config.yaml"
+    ) -> None:
         """Initialize UR10 identification with robot model and configuration.
 
         Args:
@@ -151,9 +160,7 @@ class UR10Identification(BaseIdentification):
 
         try:
             # Use DataProcessor for improved data loading
-            q_df = DataProcessor.load_csv_data(
-                "data/identification_q_simulation.csv"
-            )
+            q_df = DataProcessor.load_csv_data("data/identification_q_simulation.csv")
             tau_df = DataProcessor.load_csv_data(
                 "data/identification_tau_simulation.csv"
             )
@@ -164,22 +171,20 @@ class UR10Identification(BaseIdentification):
             print(f"Loaded {len(q_raw)} samples from CSV files")
 
             # Limit samples if needed
-            max_samples = min(len(q_raw),
-                              self.identif_config.get("nb_samples", 100))
+            max_samples = min(len(q_raw), self.identif_config.get("nb_samples", 100))
             q_raw = q_raw[:max_samples, :]
             tau_raw = tau_raw[:max_samples, :]
 
             # Apply data filtering if available
-            if hasattr(DataProcessor, 'apply_lowpass_filter'):
-                q_raw = DataProcessor.apply_lowpass_filter(
-                    q_raw, cutoff=10.0, fs=100.0
-                )
+            if hasattr(DataProcessor, "apply_lowpass_filter"):
+                q_raw = DataProcessor.apply_lowpass_filter(q_raw, cutoff=10.0, fs=100.0)
 
             # Calculate derivatives using FIGAROH function
-            q_filtered, dq_filtered, ddq_filtered = \
+            q_filtered, dq_filtered, ddq_filtered = (
                 calculate_first_second_order_differentiation(
                     self.model, q_raw, self.identif_config
                 )
+            )
 
             # Create time vector (assuming 100Hz sampling)
             dt = 0.01  # 100Hz
@@ -192,19 +197,19 @@ class UR10Identification(BaseIdentification):
                 "positions": q_filtered,
                 "velocities": dq_filtered,
                 "accelerations": ddq_filtered,
-                "torques": tau_raw[:len(q_filtered)]  # Match length
+                "torques": tau_raw[: len(q_filtered)],  # Match length
             }
 
         except Exception as e:
-            raise IdentificationError(
-                f"Failed to load UR10 trajectory data: {e}"
-            )
+            raise IdentificationError(f"Failed to load UR10 trajectory data: {e}")
 
 
 class UR10OptimalCalibration(BaseOptimalCalibration):
     """UR10-specific optimal configuration generation for calibration."""
 
-    def __init__(self, robot: Any, config_file: str = "config/ur10_config.yaml") -> None:
+    def __init__(
+        self, robot: Any, config_file: str = "config/ur10_config.yaml"
+    ) -> None:
         """Initialize UR10 optimal calibration with robot model and configuration.
 
         Args:
@@ -224,7 +229,9 @@ class UR10OptimalCalibration(BaseOptimalCalibration):
         from figaroh.calibration.calibration_tools import get_idxq_from_jname
 
         if self._sampleConfigs_file is None:
-            print("No sample configurations file specified, generating random configurations")
+            print(
+                "No sample configurations file specified, generating random configurations"
+            )
             self._generate_random_configurations()
             return
 
@@ -276,8 +283,10 @@ class UR10OptimalCalibration(BaseOptimalCalibration):
 
         # UR10 joint limits (conservative values in radians)
         # Joint limits for UR10: approximately ±2π for most joints
-        q_min = np.array([-2*np.pi, -2*np.pi, -np.pi, -2*np.pi, -2*np.pi, -2*np.pi])
-        q_max = np.array([2*np.pi, 2*np.pi, np.pi, 2*np.pi, 2*np.pi, 2*np.pi])
+        q_min = np.array(
+            [-2 * np.pi, -2 * np.pi, -np.pi, -2 * np.pi, -2 * np.pi, -2 * np.pi]
+        )
+        q_max = np.array([2 * np.pi, 2 * np.pi, np.pi, 2 * np.pi, 2 * np.pi, 2 * np.pi])
 
         # Generate random configurations
         n_samples = 500  # Default 100 samples
@@ -292,7 +301,7 @@ class UR10OptimalCalibration(BaseOptimalCalibration):
         joint_names = [f"joint_{i+1}" for i in range(len(q_min))]
         self._configs = {
             "calibration_joint_names": joint_names,
-            "calibration_joint_configurations": self.q_measured.tolist()
+            "calibration_joint_configurations": self.q_measured.tolist(),
         }
 
         print(f"Generated {len(self.q_measured)} random configurations")
@@ -301,7 +310,9 @@ class UR10OptimalCalibration(BaseOptimalCalibration):
 class UR10OptimalTrajectory:
     """UR10-specific optimal trajectory generation for dynamic identification."""
 
-    def __init__(self, robot: Any, config_file: str = "config/ur10_config.yaml") -> None:
+    def __init__(
+        self, robot: Any, config_file: str = "config/ur10_config.yaml"
+    ) -> None:
         """Initialize UR10 optimal trajectory with robot model and configuration.
 
         Args:
@@ -318,7 +329,9 @@ class UR10OptimalTrajectory:
 
         self.config = config
         self.identif_data = self.config["identification"]
-        self.identif_config = get_identification_param_from_yaml(robot, self.identif_data)
+        self.identif_config = get_identification_param_from_yaml(
+            robot, self.identif_data
+        )
 
         # Trajectory parameters
         self.n_waypoints = 10
@@ -330,28 +343,28 @@ class UR10OptimalTrajectory:
     def generate_base_parameters(self) -> None:
         """Generate base parameters for trajectory optimization."""
         # Generate random samples for structural analysis
-        q_rand = np.random.uniform(
-            low=-np.pi, high=np.pi, size=(1000, self.model.nq)
-        )
-        dq_rand = np.random.uniform(
-            low=-10, high=10, size=(1000, self.model.nv)
-        )
-        ddq_rand = np.random.uniform(
-            low=-10, high=10, size=(1000, self.model.nv)
-        )
+        q_rand = np.random.uniform(low=-np.pi, high=np.pi, size=(1000, self.model.nq))
+        dq_rand = np.random.uniform(low=-10, high=10, size=(1000, self.model.nv))
+        ddq_rand = np.random.uniform(low=-10, high=10, size=(1000, self.model.nv))
 
         # Build regressor matrix
-        W = build_regressor_basic(self.robot, q_rand, dq_rand, ddq_rand, self.identif_config)
+        W = build_regressor_basic(
+            self.robot, q_rand, dq_rand, ddq_rand, self.identif_config
+        )
 
         # Create dummy standard parameters
-        self.standard_parameter = get_standard_parameters(self.model, self.identif_config)
+        self.standard_parameter = get_standard_parameters(
+            self.model, self.identif_config
+        )
 
         # Remove zero columns and build reduced regressor
         idx_e, params_r = get_index_eliminate(W, self.standard_parameter, 1e-6)
         W_e = build_regressor_reduced(W, idx_e)
 
         # Calculate base regressor and base parameters
-        _, params_base, idx_base = get_baseParams(W_e, params_r, self.standard_parameter)
+        _, params_base, idx_base = get_baseParams(
+            W_e, params_r, self.standard_parameter
+        )
         self.params_base = params_base
         self.idx_base = idx_base
 
@@ -391,9 +404,7 @@ class UR10OptimalTrajectory:
 
         return q, dq, ddq
 
-    def check_constraints(
-        self, q: np.ndarray, dq: np.ndarray, ddq: np.ndarray
-    ) -> bool:
+    def check_constraints(self, q: np.ndarray, dq: np.ndarray, ddq: np.ndarray) -> bool:
         """Check if trajectory satisfies joint and dynamic constraints.
 
         Args:
@@ -462,17 +473,18 @@ class UR10OptimalTrajectory:
         self.generate_base_parameters()
 
         best_trajectory = None
-        best_condition_number = float('inf')
+        best_condition_number = float("inf")
 
         for i in range(n_iterations):
             # Generate random waypoints within joint limits
             waypoints = np.random.uniform(
-                low=-np.pi, high=np.pi,
-                size=(self.n_waypoints, self.model.nq)
+                low=-np.pi, high=np.pi, size=(self.n_waypoints, self.model.nq)
             )
 
             # Generate trajectory
-            q, dq, ddq = self.cubic_spline_trajectory(waypoints, self.trajectory_duration)
+            q, dq, ddq = self.cubic_spline_trajectory(
+                waypoints, self.trajectory_duration
+            )
 
             # Check constraints
             if not self.check_constraints(q, dq, ddq):
@@ -484,49 +496,55 @@ class UR10OptimalTrajectory:
             if cond_num < best_condition_number:
                 best_condition_number = cond_num
                 best_trajectory = {
-                    'q': q, 'dq': dq, 'ddq': ddq,
-                    'waypoints': waypoints,
-                    'condition_number': cond_num
+                    "q": q,
+                    "dq": dq,
+                    "ddq": ddq,
+                    "waypoints": waypoints,
+                    "condition_number": cond_num,
                 }
 
             if i % 10 == 0:
-                print(f"Iteration {i}: best condition number = {best_condition_number:.2e}")
+                print(
+                    f"Iteration {i}: best condition number = {best_condition_number:.2e}"
+                )
 
         self.optimal_trajectory = best_trajectory
-        print(f"Optimal trajectory found with condition number: {best_condition_number:.2e}")
+        print(
+            f"Optimal trajectory found with condition number: {best_condition_number:.2e}"
+        )
 
         return best_trajectory
 
     def plot_results(self) -> None:
         """Plot optimal trajectory results."""
-        if not hasattr(self, 'optimal_trajectory'):
+        if not hasattr(self, "optimal_trajectory"):
             print("No optimal trajectory results to plot. Run solve() first.")
             return
 
         traj = self.optimal_trajectory
-        time_vector = np.arange(len(traj['q'])) * self.dt
+        time_vector = np.arange(len(traj["q"])) * self.dt
 
         # Plot joint trajectories
         fig, axes = plt.subplots(3, 1, figsize=(12, 10))
 
         # Position
-        axes[0].plot(time_vector, traj['q'])
-        axes[0].set_ylabel('Joint Position (rad)')
-        axes[0].set_title('UR10 Optimal Trajectory - Joint Positions')
+        axes[0].plot(time_vector, traj["q"])
+        axes[0].set_ylabel("Joint Position (rad)")
+        axes[0].set_title("UR10 Optimal Trajectory - Joint Positions")
         axes[0].grid(True)
-        axes[0].legend([f'Joint {i+1}' for i in range(self.model.nq)])
+        axes[0].legend([f"Joint {i+1}" for i in range(self.model.nq)])
 
         # Velocity
-        axes[1].plot(time_vector, traj['dq'])
-        axes[1].set_ylabel('Joint Velocity (rad/s)')
-        axes[1].set_title('Joint Velocities')
+        axes[1].plot(time_vector, traj["dq"])
+        axes[1].set_ylabel("Joint Velocity (rad/s)")
+        axes[1].set_title("Joint Velocities")
         axes[1].grid(True)
 
         # Acceleration
-        axes[2].plot(time_vector, traj['ddq'])
-        axes[2].set_ylabel('Joint Acceleration (rad/s²)')
-        axes[2].set_xlabel('Time (s)')
-        axes[2].set_title('Joint Accelerations')
+        axes[2].plot(time_vector, traj["ddq"])
+        axes[2].set_ylabel("Joint Acceleration (rad/s²)")
+        axes[2].set_xlabel("Time (s)")
+        axes[2].set_title("Joint Accelerations")
         axes[2].grid(True)
 
         plt.tight_layout()
@@ -536,7 +554,7 @@ class UR10OptimalTrajectory:
 
     def save_results(self, output_dir: str = "results") -> None:
         """Save optimal trajectory results."""
-        if not hasattr(self, 'optimal_trajectory'):
+        if not hasattr(self, "optimal_trajectory"):
             print("No optimal trajectory results to save. Run solve() first.")
             return
 
@@ -546,24 +564,26 @@ class UR10OptimalTrajectory:
 
         # Save to YAML
         results_dict = {
-            'condition_number': float(traj['condition_number']),
-            'waypoints': traj['waypoints'].tolist(),
-            'trajectory_duration': self.trajectory_duration,
-            'n_waypoints': self.n_waypoints,
-            'sampling_time': self.dt
+            "condition_number": float(traj["condition_number"]),
+            "waypoints": traj["waypoints"].tolist(),
+            "trajectory_duration": self.trajectory_duration,
+            "n_waypoints": self.n_waypoints,
+            "sampling_time": self.dt,
         }
 
         with open(os.path.join(output_dir, "ur10_optimal_trajectory.yaml"), "w") as f:
             yaml.dump(results_dict, f, default_flow_style=False)
 
         # Save trajectory data to CSV
-        time_vector = np.arange(len(traj['q'])) * self.dt
-        df = pd.DataFrame({
-            'time': time_vector,
-            **{f'q{i+1}': traj['q'][:, i] for i in range(self.model.nq)},
-            **{f'dq{i+1}': traj['dq'][:, i] for i in range(self.model.nv)},
-            **{f'ddq{i+1}': traj['ddq'][:, i] for i in range(self.model.nv)},
-        })
+        time_vector = np.arange(len(traj["q"])) * self.dt
+        df = pd.DataFrame(
+            {
+                "time": time_vector,
+                **{f"q{i+1}": traj["q"][:, i] for i in range(self.model.nq)},
+                **{f"dq{i+1}": traj["dq"][:, i] for i in range(self.model.nv)},
+                **{f"ddq{i+1}": traj["ddq"][:, i] for i in range(self.model.nv)},
+            }
+        )
         df.to_csv(os.path.join(output_dir, "ur10_optimal_trajectory.csv"), index=False)
 
         print(f"Results saved to {output_dir}/ur10_optimal_trajectory.yaml and .csv")

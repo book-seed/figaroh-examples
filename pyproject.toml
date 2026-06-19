@@ -1,0 +1,23 @@
+# This file is for tool configuration only.
+# figaroh-examples is not an installable package.
+
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | models
+  | examples/tiago/config/archive
+)/
+'''

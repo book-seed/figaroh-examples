@@ -5,17 +5,17 @@ channels:
 dependencies:
   - python>=3.8
   - pip
-  
+
   # Core scientific computing - used extensively in examples
   - numpy
   - scipy
   - matplotlib
   - pandas
-  
+
   # Robotics and optimization - required for figaroh functionality
   - pinocchio
   - cyipopt
-  
+
   # Install remaining via pip
   - pip:
     - figaroh

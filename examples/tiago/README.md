@@ -20,7 +20,7 @@ Manufacturing tolerances, assembly errors, and component wear introduce systemat
 
 #### What This Task Solves
 - **Joint offset errors**: Incorrect zero positions of robot joints
-- **Link length errors**: Variations from nominal link dimensions  
+- **Link length errors**: Variations from nominal link dimensions
 - **Link orientation errors**: Misaligned coordinate frames between links
 - **Camera-robot calibration**: Unknown transformation between external sensors and robot base
 - **End-effector calibration**: Tool center point and orientation uncertainties
@@ -40,7 +40,7 @@ P_measured = forward_kinematics(q, θ_nominal + Δθ) + ε
 Where:
 - `P_measured`: Measured end-effector position
 - `q`: Joint angles
-- `θ_nominal`: Nominal kinematic parameters  
+- `θ_nominal`: Nominal kinematic parameters
 - `Δθ`: Parameter corrections (what we solve for)
 - `ε`: Measurement noise
 
@@ -145,7 +145,7 @@ Where:
 The optimization problem is formulated as:
 - **Variables**: Weight w[i] for each candidate configuration i
 - **Objective**: Maximize weighted determinant of information matrix
-- **Constraints**: 
+- **Constraints**:
   - Sum of weights ≤ 1 (convex combination)
   - Non-negativity of weights
   - Configuration feasibility
@@ -180,7 +180,7 @@ The task formulates trajectory optimization as a constrained nonlinear programmi
 minimize: condition_number(W_base(trajectory))
 subject to:
 - Joint position, velocity, acceleration limits
-- Joint torque/force limits  
+- Joint torque/force limits
 - Self-collision avoidance
 - Trajectory smoothness (C² continuity)
 ```

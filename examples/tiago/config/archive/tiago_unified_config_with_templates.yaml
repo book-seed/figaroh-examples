@@ -17,7 +17,7 @@ extends: "templates/humanoid_robot.yaml"
 robot:
   name: "tiago"
   description: "PAL Robotics TIAGo mobile manipulator robot"
-  
+
   properties:
     # TIAGo joint configuration (torso + arm)
     joints:
@@ -30,8 +30,8 @@ robot:
         velocity: [0.05009095, 0.05009095, 0.07504916, 0.0715585, 0.05585054, 0.12217305]
         acceleration: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0]
         torque: [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]
-    
-    # TIAGo mechanical properties  
+
+    # TIAGo mechanical properties
     mechanics:
       reduction_ratios: [32.0, 32.0, 45.0, -48.0, 45.0, 32.0]
       ratio_essential: 30.0
@@ -40,21 +40,21 @@ robot:
         static: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       actuator_inertias: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       joint_offsets: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    
+
     # TIAGo has coupled wrist
     coupling:
       has_coupled_wrist: true
       Iam6: 0
       fvm6: 0
       fsm6: 0
-      
+
     # Mobile base properties (overrides template)
     mobility:
       has_mobile_base: true
       base_type: "differential_drive"
       max_linear_velocity: 1.0
       max_angular_velocity: 2.0
-      
+
     # Sensor configuration (extends template)
     sensors:
       has_head_camera: true
@@ -68,22 +68,22 @@ tasks:
     # Inherits from template and overrides specific parameters
     parameters:
       outlier_threshold: 0.022  # TIAGo-specific precision (2.2cm)
-      
+
     kinematics:
       base_frame: "universe"
       tool_frame: "wrist_ft_tool_link"
-      
+
     measurements:
       markers:
         - name: "wrist_marker"
           reference_joint: "arm_7_joint"
           measurable_dof: [true, true, true, false, false, false]
           sensor_type: "mocap"
-          
+
       poses:
         base_pose: [0.0908, 0.08, 0.0, -1.57, 0.0, 0.0]
         tool_pose: [0.2163, 0.03484, 0.004, 0.0, -1.57, -1.57]
-    
+
     data:
       source_file: "data/calibration/mocap/qualysis_base_hand_calibration.csv"
       sample_configurations_file: "data/optimal_configs/eye_hand_calibration_tiago_hey5_100.yaml"
@@ -94,18 +94,18 @@ tasks:
     problem:
       include_external_forces: true  # TIAGo has F/T sensors
       force_torque_sensors: ["wrist_ft_sensor"]
-        
+
     signal_processing:
       sampling_frequency: 5000.0  # High rate due to 1/0.0002 = 5000Hz
       cutoff_frequency: 100.0
 
   optimal_configuration:
     enabled: true  # Enable this task for TIAGo
-    
+
     parameters:
       number_of_samples: 100
       optimization_objectives: ["condition_number", "manipulability"]
-      
+
     output:
       output_file: "data/optimal_configs/tiago_optimal_configs.yaml"
 

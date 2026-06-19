@@ -142,14 +142,14 @@ def main():
     Main calibration workflow for ROBOT_TITLE robot.
     """
     print("Starting ROBOT_TITLE kinematic calibration...")
-    
+
     # TODO: Implement calibration workflow
     # 1. Load robot model
     # 2. Load measurement data
     # 3. Define calibration parameters
     # 4. Run calibration
     # 5. Save results
-    
+
     print("Calibration workflow not yet implemented!")
     print("Please refer to examples/tiago/calibration.py for reference.")
 
@@ -186,14 +186,14 @@ def main():
     Main identification workflow for ROBOT_TITLE robot.
     """
     print("Starting ROBOT_TITLE dynamic identification...")
-    
+
     # TODO: Implement identification workflow
     # 1. Load robot model
     # 2. Load trajectory data (positions, velocities, accelerations, torques)
     # 3. Build regressor matrix
     # 4. Solve least squares problem
     # 5. Validate and save parameters
-    
+
     print("Identification workflow not yet implemented!")
     print("Please refer to examples/tiago/identification.py for reference.")
 
@@ -230,14 +230,14 @@ def main():
     Generate optimal configurations for ROBOT_TITLE calibration.
     """
     print("Generating optimal configurations for ROBOT_TITLE...")
-    
+
     # TODO: Implement optimal configuration generation
     # 1. Load robot model
     # 2. Define workspace constraints
     # 3. Define optimization objectives
     # 4. Run optimization
     # 5. Save optimal configurations
-    
+
     print("Optimal configuration generation not yet implemented!")
     print("Please refer to examples/tiago/optimal_config.py for reference.")
 
@@ -274,14 +274,14 @@ def main():
     Generate optimal trajectory for ROBOT_TITLE identification.
     """
     print("Generating optimal trajectory for ROBOT_TITLE...")
-    
+
     # TODO: Implement optimal trajectory generation
     # 1. Load robot model
     # 2. Define active joints
     # 3. Define trajectory constraints
     # 4. Run trajectory optimization
     # 5. Save trajectory
-    
+
     print("Optimal trajectory generation not yet implemented!")
     print("Please refer to examples/tiago/optimal_trajectory.py for reference.")
 
@@ -324,15 +324,15 @@ from figaroh.tools.robot import Robot
 class OptimalTrajectoryIPOPT:
     """
     Optimal trajectory generation using IPOPT solver.
-    
+
     This class handles trajectory optimization for the ROBOT_TITLE robot
     to generate information-rich motions for parameter identification.
     """
-    
+
     def __init__(self, robot: Robot, active_joints: list, config_file: str):
         """
         Initialize the trajectory optimizer.
-        
+
         Args:
             robot: Robot model
             active_joints: List of joint names to include in optimization
@@ -341,24 +341,24 @@ class OptimalTrajectoryIPOPT:
         self.robot = robot
         self.active_joints = active_joints
         self.config_file = config_file
-        
+
         print(f"Initialized trajectory optimizer for ROBOT_TITLE")
         print(f"Active joints: {active_joints}")
-    
+
     def solve(self, stack_reps: int = 2):
         """
         Solve the trajectory optimization problem.
-        
+
         Args:
             stack_reps: Number of trajectory repetitions to stack
-            
+
         Returns:
             dict: Results containing trajectory segments and metrics
         """
         print("Trajectory optimization not yet implemented!")
         print("Please refer to examples/tiago/utils/tiago_tools.py for reference.")
         return {'T_F': None}
-    
+
     def plot_results(self):
         """Plot the optimization results."""
         print("Plotting not yet implemented!")
@@ -367,16 +367,16 @@ class OptimalTrajectoryIPOPT:
 def load_robot_model(robot_name: str = "robot_lower", **kwargs):
     """
     Load the ROBOT_TITLE robot model.
-    
+
     Args:
         robot_name: Name/identifier for the robot
         **kwargs: Additional arguments for robot loading
-        
+
     Returns:
         Robot: Loaded robot model
     """
     from figaroh.tools.robot import load_robot
-    
+
     # TODO: Update with correct parameters for your robot
     robot = load_robot(
         robot_name=robot_name,
@@ -384,7 +384,7 @@ def load_robot_model(robot_name: str = "robot_lower", **kwargs):
         robot_pkg="robot_lower_description",
         **kwargs
     )
-    
+
     return robot
 EOF
 
@@ -406,24 +406,24 @@ from figaroh.tools.robot import Robot
 def build_robot_lower_simplified(robot: Robot):
     """
     Build a simplified collision model for the ROBOT_TITLE robot.
-    
+
     Args:
         robot: Original robot model
-        
+
     Returns:
         Robot: Robot with simplified collision geometry
     """
     print("Building simplified collision model for ROBOT_TITLE...")
-    
+
     # TODO: Implement simplified collision model
     # This typically involves:
     # 1. Identifying critical links that need collision checking
     # 2. Simplifying complex geometries to basic shapes (spheres, capsules, boxes)
     # 3. Defining collision pairs to check
-    
+
     print("Simplified collision model not yet implemented!")
     print("Returning original robot model.")
-    
+
     return robot
 EOF
 
@@ -441,12 +441,12 @@ cat > "$NEW_DIR/config/${ROBOT_NAME_LOWER}_config.yaml" << 'EOF'
 robot:
   name: "robot_lower"
   description: "ROBOT_TITLE robot configuration"
-  
+
   # Robot model parameters
   model:
     urdf_path: "path/to/robot_lower.urdf"
     package_name: "robot_lower_description"
-    
+
   # Joint configuration
   joints:
     active_joints:
@@ -457,7 +457,7 @@ robot:
       - "joint_4"
       - "joint_5"
       - "joint_6"
-    
+
     # Joint limits [min, max] in radians
     limits:
       joint_1: [-3.14, 3.14]
@@ -472,18 +472,18 @@ calibration:
   method: "least_squares"
   max_iterations: 100
   tolerance: 1e-6
-  
+
   # Parameters to calibrate
   parameters:
     - "link_lengths"
     - "joint_offsets"
     - "link_twists"
 
-# Identification settings  
+# Identification settings
 identification:
   method: "weighted_least_squares"
   regularization: 1e-4
-  
+
   # Parameters to identify
   parameters:
     - "masses"
@@ -496,7 +496,7 @@ optimal_trajectory:
   duration: 10.0  # seconds
   frequency: 100  # Hz
   n_segments: 5
-  
+
   constraints:
     position_bounds: true
     velocity_bounds: true
@@ -528,7 +528,7 @@ This directory provides a comprehensive framework for calibrating and identifyin
 The ROBOT_TITLE robot requires accurate modeling for precision tasks. This framework provides four interconnected tools:
 
 1. **Kinematic Calibration** - Correct geometric errors in robot structure
-2. **Dynamic Parameter Identification** - Identify physical properties for accurate dynamics  
+2. **Dynamic Parameter Identification** - Identify physical properties for accurate dynamics
 3. **Optimal Configuration Generation** - Scientifically select measurement poses
 4. **Optimal Trajectory Generation** - Create information-rich motion for identification
 
@@ -606,7 +606,7 @@ This is a template directory. To complete the implementation for your ROBOT_TITL
 - [ ] Implement calibration workflow in `calibration.py`
 - [ ] Validate calibration results
 
-### 3. Identification Implementation  
+### 3. Identification Implementation
 - [ ] Record robot motion data (positions, velocities, torques)
 - [ ] Prepare data files in `data/identification/`
 - [ ] Implement identification workflow in `identification.py`
@@ -645,7 +645,7 @@ Store measurement data in `data/calibration/`:
 - CSV format with columns: [timestamp, x, y, z, ...]
 - Include joint angles and measured positions
 
-### Identification Data  
+### Identification Data
 Store trajectory data in `data/identification/`:
 - CSV format with columns: [timestamp, q1, q2, ..., dq1, dq2, ..., tau1, tau2, ...]
 - Positions, velocities, and torques for all joints
@@ -774,7 +774,7 @@ The following directory structure and files have been automatically generated:
 
 ### 📄 Python Files
 - `calibration.py` - Kinematic calibration script
-- `identification.py` - Dynamic identification script  
+- `identification.py` - Dynamic identification script
 - `optimal_config.py` - Optimal configuration generation
 - `optimal_trajectory.py` - Optimal trajectory generation
 
@@ -817,7 +817,7 @@ print(f"Loaded robot with {robot.nq} DOF")
 1. Edit `utils/robot_lower_tools.py`:
    - Update `load_robot_model()` with correct parameters
    - Implement `OptimalTrajectoryIPOPT` if needed
-   
+
 2. Edit `utils/simplified_collision_model.py`:
    - Implement simplified collision geometry if doing trajectory optimization
 
@@ -825,7 +825,7 @@ print(f"Loaded robot with {robot.nq} DOF")
 1. For calibration:
    - Collect end-effector position measurements
    - Save to `data/calibration/` in CSV format
-   
+
 2. For identification:
    - Record robot trajectories with joint positions, velocities, and torques
    - Save to `data/identification/` in CSV format

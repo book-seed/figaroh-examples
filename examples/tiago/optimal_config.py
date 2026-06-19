@@ -47,14 +47,16 @@ def parse_args() -> argparse.Namespace:
         help="Path to robot URDF file",
     )
     parser.add_argument(
-        "--end-effector", "-e",
+        "--end-effector",
+        "-e",
         type=str,
         default="hey5",
         dest="end_effector",
         help="End-effector type (hey5, schunk, etc.)",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose (INFO) logging",
     )

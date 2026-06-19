@@ -40,13 +40,24 @@ from figaroh.tools.robot import load_robot
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="UR10 optimal configuration generation")
-    parser.add_argument("--config", type=str, default="config/ur10_unified_config.yaml",
-                        help="Path to unified config YAML file")
-    parser.add_argument("--urdf", type=str, default="urdf/ur10_robot.urdf",
-                        help="Path to robot URDF file")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Enable verbose (INFO) logging")
+    parser = argparse.ArgumentParser(
+        description="UR10 optimal configuration generation"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config/ur10_unified_config.yaml",
+        help="Path to unified config YAML file",
+    )
+    parser.add_argument(
+        "--urdf",
+        type=str,
+        default="urdf/ur10_robot.urdf",
+        help="Path to robot URDF file",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose (INFO) logging"
+    )
     return parser.parse_args()
 
 
@@ -94,21 +105,25 @@ def main(args: argparse.Namespace) -> None:
         # 4. Display results
         print("\n4. Results Summary:")
 
-        if (hasattr(opt_calib, 'optimal_configurations') and
-            'calibration_joint_configurations' in opt_calib.optimal_configurations):
-            selected_configs = opt_calib.optimal_configurations['calibration_joint_configurations']
+        if (
+            hasattr(opt_calib, "optimal_configurations")
+            and "calibration_joint_configurations" in opt_calib.optimal_configurations
+        ):
+            selected_configs = opt_calib.optimal_configurations[
+                "calibration_joint_configurations"
+            ]
             print(f"Selected {len(selected_configs)} optimal configurations")
             print(f"Total candidates: {opt_calib.calib_config['NbSample']}")
-            ratio = len(selected_configs) / opt_calib.calib_config['NbSample']
+            ratio = len(selected_configs) / opt_calib.calib_config["NbSample"]
             print(f"Selection ratio: {ratio:.2%}")
 
         # 5. Show optimization quality
-        if hasattr(opt_calib, 'detroot_whole'):
+        if hasattr(opt_calib, "detroot_whole"):
             print(f"Information matrix determinant root: {opt_calib.detroot_whole:.4e}")
 
-        if hasattr(opt_calib, 'optimal_weights'):
+        if hasattr(opt_calib, "optimal_weights"):
             weights = opt_calib.optimal_weights
-            if hasattr(weights, '__len__') and len(weights) > 0:
+            if hasattr(weights, "__len__") and len(weights) > 0:
                 print(f"Weight sum: {np.sum(weights):.4f}")
 
         print("\n" + "=" * 50)

@@ -48,7 +48,8 @@ def parse_args() -> argparse.Namespace:
         help="Path to robot URDF file",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose (INFO) logging",
     )
@@ -116,9 +117,7 @@ def main() -> TiagoIdentification | None:
         ps["active_joints"] = active_joints
 
         # Joint parameters
-        ps["act_Jid"] = [
-            tiago_iden.model.getJointId(i) for i in ps["active_joints"]
-        ]
+        ps["act_Jid"] = [tiago_iden.model.getJointId(i) for i in ps["active_joints"]]
         ps["act_J"] = [tiago_iden.model.joints[jid] for jid in ps["act_Jid"]]
         ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
         ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
@@ -147,12 +146,11 @@ def main() -> TiagoIdentification | None:
         print("=" * 60)
 
         print(
-            f"Number of base parameters identified: "
-            f"{len(tiago_iden.params_base)}"
+            f"Number of base parameters identified: " f"{len(tiago_iden.params_base)}"
         )
         print(f"Correlation coefficient: {tiago_iden.correlation:.4f}")
 
-        if hasattr(tiago_iden, 'result'):
+        if hasattr(tiago_iden, "result"):
             for key, value in tiago_iden.result.items():
                 if isinstance(value, (int, float)):
                     if isinstance(value, float):
@@ -160,9 +158,7 @@ def main() -> TiagoIdentification | None:
                     else:
                         print(f"{key}: {value}")
                 else:
-                    print(
-                        f"{key}: {type(value).__name__} of length {len(value)}"
-                    )
+                    print(f"{key}: {type(value).__name__} of length {len(value)}")
 
         print("\nBase parameters:")
         for i, param_name in enumerate(tiago_iden.params_base):

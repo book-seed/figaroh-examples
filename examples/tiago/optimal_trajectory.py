@@ -44,7 +44,8 @@ def parse_args() -> argparse.Namespace:
         help="Path to robot URDF file",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose (INFO) logging",
     )
@@ -53,16 +54,19 @@ def parse_args() -> argparse.Namespace:
 
 def plot_condition_number_evolution(results: dict) -> None:
     """Plot the evolution of condition number during optimization."""
-    if not results.get('iteration_data'):
+    if not results.get("iteration_data"):
         return
 
     plt.figure(figsize=(12, 6))
 
-    for i, iter_data in enumerate(results['iteration_data']):
-        if 'iterations' in iter_data and 'obj_values' in iter_data:
+    for i, iter_data in enumerate(results["iteration_data"]):
+        if "iterations" in iter_data and "obj_values" in iter_data:
             plt.plot(
-                iter_data['iterations'], iter_data['obj_values'],
-                label=f"Segment {i + 1}", marker='o', markersize=3,
+                iter_data["iterations"],
+                iter_data["obj_values"],
+                label=f"Segment {i + 1}",
+                marker="o",
+                markersize=3,
             )
 
     plt.title("Evolution of Condition Number of Base Regressor")
@@ -112,20 +116,14 @@ def main() -> dict | None:
         robot = build_tiago_simplified(robot)
 
         # Create trajectory optimizer
-        opt_traj = OptimalTrajectoryIPOPT(
-            robot, active_joints, str(config_path)
-        )
+        opt_traj = OptimalTrajectoryIPOPT(robot, active_joints, str(config_path))
 
         ps = opt_traj.identif_config
 
         # Joint parameters
         ps["active_joints"] = active_joints
-        ps["act_Jid"] = [
-            opt_traj.model.getJointId(i) for i in ps["active_joints"]
-        ]
-        ps["act_J"] = [
-            opt_traj.model.joints[jid] for jid in ps["act_Jid"]
-        ]
+        ps["act_Jid"] = [opt_traj.model.getJointId(i) for i in ps["active_joints"]]
+        ps["act_J"] = [opt_traj.model.joints[jid] for jid in ps["act_Jid"]]
         ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
         ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
 
@@ -136,7 +134,7 @@ def main() -> dict | None:
         results = opt_traj.solve(stack_reps=2)
 
         # Plot results
-        if results.get('T_F'):
+        if results.get("T_F"):
             opt_traj.plot_results()
             plot_condition_number_evolution(results)
             print(f"Generated {len(results['T_F'])} trajectory segments")
@@ -153,7 +151,7 @@ def main() -> dict | None:
 if __name__ == "__main__":
     results = main()
 
-    if results and results.get('T_F'):
+    if results and results.get("T_F"):
         print("\nOptimization completed successfully!")
         print(f"Generated {len(results['T_F'])} trajectory segments")
     else:

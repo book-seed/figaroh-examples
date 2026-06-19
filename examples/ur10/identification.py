@@ -32,13 +32,24 @@ from figaroh.tools.robot import load_robot
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="UR10 dynamic parameter identification")
-    parser.add_argument("--config", type=str, default="config/ur10_unified_config.yaml",
-                        help="Path to unified config YAML file")
-    parser.add_argument("--urdf", type=str, default="urdf/ur10_robot.urdf",
-                        help="Path to robot URDF file")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Enable verbose (INFO) logging")
+    parser = argparse.ArgumentParser(
+        description="UR10 dynamic parameter identification"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config/ur10_unified_config.yaml",
+        help="Path to unified config YAML file",
+    )
+    parser.add_argument(
+        "--urdf",
+        type=str,
+        default="urdf/ur10_robot.urdf",
+        help="Path to robot URDF file",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose (INFO) logging"
+    )
     return parser.parse_args()
 
 
@@ -77,9 +88,7 @@ def main(args: argparse.Namespace) -> None:
         ps = ur10_identif.identif_config
         ps["active_joints"] = active_joints
         # Joint parameters
-        ps["act_Jid"] = [
-            ur10_identif.model.getJointId(i) for i in ps["active_joints"]
-        ]
+        ps["act_Jid"] = [ur10_identif.model.getJointId(i) for i in ps["active_joints"]]
         ps["act_J"] = [ur10_identif.model.joints[jid] for jid in ps["act_Jid"]]
         ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
         ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
@@ -101,12 +110,11 @@ def main(args: argparse.Namespace) -> None:
         print("=" * 60)
 
         print(
-            f"Number of base parameters identified: "
-            f"{len(ur10_identif.params_base)}"
+            f"Number of base parameters identified: " f"{len(ur10_identif.params_base)}"
         )
         print(f"Correlation coefficient: {ur10_identif.correlation:.4f}")
 
-        if hasattr(ur10_identif, 'result'):
+        if hasattr(ur10_identif, "result"):
             for key, value in ur10_identif.result.items():
                 if isinstance(value, (int, float)):
                     if isinstance(value, float):

@@ -92,9 +92,7 @@ def update_parameters(
 ) -> None:
     # If no res provided, load from saved calibration results
     if res is None:
-        data_path = join(
-            dirname(abspath(__file__)), "data", "calibration_results.npz"
-        )
+        data_path = join(dirname(abspath(__file__)), "data", "calibration_results.npz")
         if not os.path.exists(data_path):
             raise FileNotFoundError(
                 f"Calibration results not found at {data_path}. "
@@ -156,9 +154,7 @@ def update_parameters(
         "_pitch_offset",
         "_yaw_offset",
     ]
-    path_save_xacro = join(
-        dirname(str(abspath(__file__))), f"data/offset.xacro"
-    )
+    path_save_xacro = join(dirname(str(abspath(__file__))), f"data/offset.xacro")
     with open(path_save_xacro, "w") as output_file:
         for i in range(calib_config["NbJoint"]):
             for j in range(6):

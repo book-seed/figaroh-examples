@@ -111,7 +111,7 @@ optimal_trajectory:
 common:
   robot_name: tiago
   robot_description: tiago_description
-  
+
   # Logging and debugging
   logging:
     level: INFO  # DEBUG, INFO, WARNING, ERROR

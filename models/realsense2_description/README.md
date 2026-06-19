@@ -43,13 +43,13 @@ This applications function as follows.
 - Open the `.bashrc` with nano:
 ~~~
     nano ~/.bashrc
-~~~    
+~~~
 - Insert this line at the end of the `~/.bashrc` file for sourcing your workspace:
 ~~~
     source ~/catkin_ws/devel/setup.bash
 ~~~
 - Clone this repo in the `~/catkin_ws/src` folder by typing:
-~~~ 
+~~~
     cd ~/catkin_ws/src
     git clone https://github.com/issaiass/realsense2_description
     git clone https://github.com/issaiass/realsense_gazebo_plugin
@@ -72,7 +72,7 @@ This applications function as follows.
 <details open>
 <summary> <b>Results<b></summary>
 
-You could see the results on this youtube video.  
+You could see the results on this youtube video.
 
 <p align="center">
 
@@ -125,7 +125,7 @@ Your contributions are always welcome! Please feel free to fork and modify the c
 [<img src="https://img.shields.io/badge/linkedin-%230077B5.svg?&style=for-the-badge&logo=linkedin&logoColor=white" />](https://www.linkedin.com/in/riawa)
 [<img src="https://img.shields.io/badge/telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white"/>](https://t.me/issaiass)
 [<img src="https://img.shields.io/badge/instagram-%23E4405F.svg?&style=for-the-badge&logo=instagram&logoColor=white">](https://www.instagram.com/daqsyspty/)
-[<img src="https://img.shields.io/badge/twitter-%231DA1F2.svg?&style=for-the-badge&logo=twitter&logoColor=white" />](https://twitter.com/daqsyspty) 
+[<img src="https://img.shields.io/badge/twitter-%231DA1F2.svg?&style=for-the-badge&logo=twitter&logoColor=white" />](https://twitter.com/daqsyspty)
 [<img src ="https://img.shields.io/badge/facebook-%233b5998.svg?&style=for-the-badge&logo=facebook&logoColor=white%22">](https://www.facebook.com/daqsyspty)
 [<img src="https://img.shields.io/badge/linkedin-%230077B5.svg?&style=for-the-badge&logo=linkedin&logoColor=white" />](https://www.linkedin.com/in/riawe)
 [<img src="https://img.shields.io/badge/tiktok-%23000000.svg?&style=for-the-badge&logo=tiktok&logoColor=white" />](https://www.linkedin.com/in/riawe)

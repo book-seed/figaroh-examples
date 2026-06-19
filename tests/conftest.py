@@ -16,18 +16,14 @@ if str(figaroh_src) not in sys.path:
 if str(examples_root) not in sys.path:
     sys.path.insert(0, str(examples_root))
 
+
 # Configure pytest
 def pytest_configure(config):
     """Configure pytest with custom markers."""
     config.addinivalue_line(
-        "markers", 
-        "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
     )
+    config.addinivalue_line("markers", "integration: marks tests as integration tests")
     config.addinivalue_line(
-        "markers",
-        "integration: marks tests as integration tests"
-    )
-    config.addinivalue_line(
-        "markers",
-        "real_config: marks tests that use real config files"
+        "markers", "real_config: marks tests that use real config files"
     )

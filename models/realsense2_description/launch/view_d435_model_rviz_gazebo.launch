@@ -6,7 +6,7 @@
       <param name="publish_frequency" type="double" value="30.0" />
     </node>
 
-    <!-- this will include the launch file for gazebo given the model -->  
+    <!-- this will include the launch file for gazebo given the model -->
     <include file="$(find realsense2_description)/launch/gazebo.launch">
       <arg name="model" value="$(arg model)" />
     </include>

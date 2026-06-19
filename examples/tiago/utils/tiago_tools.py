@@ -96,8 +96,7 @@ class TiagoCalibration(BaseCalibration):
         # This helps stabilize optimization for redundant kinematic chains
         n_base_params = 6  # Base frame parameters
         n_tip_params = (
-            self.calib_config["NbMarkers"]
-            * self.calib_config["calibration_index"]
+            self.calib_config["NbMarkers"] * self.calib_config["calibration_index"]
         )
         regularization_params = var[n_base_params:-n_tip_params]
         regularization_residuals = np.sqrt(coeff_) * regularization_params
@@ -166,9 +165,7 @@ class TiagoIdentification(BaseIdentification):
                     * self.identif_config["kmotor"][joint_name]
                     * self.raw_data["torques"][:, i]
                     + 9.81
-                    * self.robot.data.mass[
-                        self.robot.model.getJointId(joint_name)
-                    ]
+                    * self.robot.data.mass[self.robot.model.getJointId(joint_name)]
                 )
             else:
                 tau_processed[:, i] = (

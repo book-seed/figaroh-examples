@@ -32,12 +32,21 @@ from figaroh.tools.robot import load_robot
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="UR10 kinematic calibration")
-    parser.add_argument("--config", type=str, default="config/ur10_unified_config.yaml",
-                        help="Path to unified config YAML file")
-    parser.add_argument("--urdf", type=str, default="urdf/ur10_robot.urdf",
-                        help="Path to robot URDF file")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Enable verbose (INFO) logging")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config/ur10_unified_config.yaml",
+        help="Path to unified config YAML file",
+    )
+    parser.add_argument(
+        "--urdf",
+        type=str,
+        default="urdf/ur10_robot.urdf",
+        help="Path to robot URDF file",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose (INFO) logging"
+    )
     return parser.parse_args()
 
 

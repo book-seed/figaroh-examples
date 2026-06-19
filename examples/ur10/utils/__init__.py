@@ -24,7 +24,7 @@ from .ur10_tools import (
 
 __all__ = [
     "UR10Calibration",
-    "UR10Identification", 
+    "UR10Identification",
     "UR10OptimalCalibration",
     "UR10OptimalTrajectory",
 ]

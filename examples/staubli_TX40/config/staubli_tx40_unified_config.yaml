@@ -8,21 +8,21 @@ extends: "../../templates/manipulator_robot.yaml"
 robot:
   name: "staubli_tx40"
   description: "Staubli TX40 6-DOF SCARA manipulator robot"
-  
+
   properties:
     # TX40 joint configuration
     joints:
       active_joints: [
-        "joint_1", "joint_2", "joint_3", 
+        "joint_1", "joint_2", "joint_3",
         "joint_4", "joint_5", "joint_6"
       ]
       joint_limits:
-        position: [-2.967, 2.967, -2.271, 2.271, -2.443, 2.443, 
+        position: [-2.967, 2.967, -2.271, 2.271, -2.443, 2.443,
                   -4.712, 4.712, -2.094, 2.094, -6.283, 6.283]
-        velocity: [6.0, 6.0, 7.5, 12.0, 12.0, 17.0]  # [rad/s] 
+        velocity: [6.0, 6.0, 7.5, 12.0, 12.0, 17.0]  # [rad/s]
         acceleration: [50.0, 50.0, 50.0, 80.0, 80.0, 100.0]  # [rad/s²]
         torque: [20.0, 20.0, 8.0, 3.0, 3.0, 1.5]  # [Nm] - smaller robot
-    
+
     # TX40 mechanical properties
     mechanics:
       reduction_ratios: [32.0, 32.0, 45.0, -48.0, 45.0, 32.0]
@@ -32,7 +32,7 @@ robot:
         static: [7.14, 8.26, 6.34, 2.48, 3.03, 0.282]   # To be identified
       actuator_inertias: [0.362, 0.362, 0.0988, 0.0313, 0.0468, 0.0105]  # To be identified
       joint_offsets: [0.392, 1.37, 0.326, -0.102, -0.0288, 0.127]      # To be calibrated
-    
+
     # TX40 has no coupled joints
     coupling:
       has_coupled_wrist: True
@@ -44,28 +44,28 @@ robot:
 tasks:
   calibration:
     enabled: true
-    
+
     parameters:
       calibration_level: "full_params"
       include_non_geometric: false
       outlier_threshold: 0.01  # 1cm - high precision for small robot
       regularization_coefficient: 0.001
-      
+
     kinematics:
       base_frame: "universe"
       tool_frame: "link_6"  # TX40 end-effector
-      
+
     measurements:
       markers:
         - name: "tool_marker"
           reference_joint: "joint_6"
           measurable_dof: [true, true, true, true, true, true]
           sensor_type: "mocap"
-          
+
       poses:
         base_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         tool_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    
+
     data:
       source_file: "data/tx40_calibration.csv"
       sample_configurations_file: "data/optimal_configs/tx40_optimal_configs.yaml"
@@ -73,18 +73,18 @@ tasks:
 
   identification:
     enabled: true
-    
+
     problem:
       include_external_forces: false  # No external sensors typically
       use_joint_torques: true
-      
+
       model_components:
         friction: true
         joint_offset: true
         actuator_inertia: true
         static_regressor: true
         inertia_regressor: true
-        
+
     signal_processing:
       sampling_frequency: 5000.0  # High precision robot
       cutoff_frequency: 100.0     # Higher cutoff for fast motions
@@ -93,32 +93,32 @@ tasks:
 
   optimal_configuration:
     enabled: true
-    
+
     parameters:
       number_of_samples: 30
       optimization_objectives: ["condition_number", "dexterity"]
-      
+
     constraints:
       joint_limit_margin: 0.05  # Small margin for precise robot
       collision_checking: false
-      
+
     output:
       save_configurations: true
       output_file: "data/optimal_configs/tx40_optimal_configs.yaml"
 
   optimal_trajectory:
     enabled: true
-    
+
     trajectory:
       waypoints: 5
       frequency: 200  # Higher frequency for precise robot
       segment_duration: 1.5  # Shorter segments
-      
+
     constraints:
       velocity_scaling: 0.6
       acceleration_scaling: 0.6
       jerk_limit: 50.0  # Higher jerk limit
-      
+
     output:
       save_trajectory: true
       output_file: "data/trajectories/tx40_optimal_trajectory.yaml"
@@ -133,7 +133,7 @@ custom:
   protection_class: "IP65"
   operating_temperature: [-10, 45]  # °C range
 
-# Configuration variants for different TX40 setups  
+# Configuration variants for different TX40 setups
 variants:
   # High-speed identification
   high_speed_identification:

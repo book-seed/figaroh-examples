@@ -1,5 +1,6 @@
 # filepath: /figaroh-examples/web-interface/core/session_manager.py
 
+
 class SessionManager:
     def __init__(self):
         self.sessions = {}
@@ -7,7 +8,7 @@ class SessionManager:
     def create_session(self, user_id):
         """Create a new session for a user."""
         session_id = self._generate_session_id()
-        self.sessions[session_id] = {'user_id': user_id, 'data': {}}
+        self.sessions[session_id] = {"user_id": user_id, "data": {}}
         return session_id
 
     def get_session(self, session_id):
@@ -22,8 +23,9 @@ class SessionManager:
     def _generate_session_id(self):
         """Generate a unique session ID."""
         import uuid
+
         return str(uuid.uuid4())
-    
+
     def cleanup(self):
         """Clean up session manager resources."""
         try:

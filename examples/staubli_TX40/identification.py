@@ -80,9 +80,7 @@ def main(args: argparse.Namespace) -> None:
 
     try:
         # Load robot model
-        robot = load_robot(
-            str(urdf_path), package_dirs="../../models"
-        )
+        robot = load_robot(str(urdf_path), package_dirs="../../models")
 
         # Create TX40 identification object
         tx40_iden = TX40Identification(robot, str(config_path))
@@ -92,10 +90,10 @@ def main(args: argparse.Namespace) -> None:
 
         # Solve identification with TX40-specific features
         tx40_iden.solve(
-            decimate=True,          # Apply TX40-specific decimation
-            plotting=True,          # Generate identification plots
-            save_results=False,     # Save parameters to CSV files
-            wls=True                # Use weighted least squares
+            decimate=True,  # Apply TX40-specific decimation
+            plotting=True,  # Generate identification plots
+            save_results=False,  # Save parameters to CSV files
+            wls=True,  # Use weighted least squares
         )
 
         # Print results summary
@@ -103,13 +101,10 @@ def main(args: argparse.Namespace) -> None:
         print("TX40 DYNAMIC PARAMETER IDENTIFICATION RESULTS")
         print("=" * 60)
 
-        print(
-            f"Number of base parameters identified: "
-            f"{len(tx40_iden.params_base)}"
-        )
+        print(f"Number of base parameters identified: " f"{len(tx40_iden.params_base)}")
         print(f"Correlation coefficient: {tx40_iden.correlation:.4f}")
 
-        if hasattr(tx40_iden, 'result'):
+        if hasattr(tx40_iden, "result"):
             for key, value in tx40_iden.result.items():
                 if isinstance(value, (int, float)):
                     if isinstance(value, float):

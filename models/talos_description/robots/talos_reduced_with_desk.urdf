@@ -113,7 +113,7 @@
       </geometry>
     </collision>
   </link>
-  
+
   <link name="desk_link_2">
     <inertial>
       <mass value="2.2"/>
@@ -134,7 +134,7 @@
       </geometry>
     </collision>
   </link>
-  
+
   <link name="desk_link_3">
     <inertial>
       <mass value="2.2"/>
@@ -155,7 +155,7 @@
       </geometry>
     </collision>
   </link>
-  
+
   <link name="desk_link_4">
     <inertial>
       <mass value="2.2"/>
@@ -177,7 +177,7 @@
     </collision>
   </link>
   <joint name="desk_1_joint" type="fixed">
-    <origin rpy="0 0 0" xyz="0.6 0. 0.67"/> 
+    <origin rpy="0 0 0" xyz="0.6 0. 0.67"/>
     <parent link="left_sole_link"/>
     <child link="desk_link_1"/>
   </joint>
@@ -2269,8 +2269,8 @@
         <geometry>
           <mesh filename="package://talos_data/meshes/v2/ankle_X_collision.stl" scale="1 ${reflect*1} 1"/>
         </geometry>
-      </collision> 
-      
+      </collision>
+
       -->
     <collision>
       <origin rpy="0 0 0" xyz="0 0 -0.1"/>
@@ -2595,8 +2595,8 @@
         <geometry>
           <mesh filename="package://talos_data/meshes/v2/ankle_X_collision.stl" scale="1 ${reflect*1} 1"/>
         </geometry>
-      </collision> 
-      
+      </collision>
+
       -->
     <collision>
       <origin rpy="0 0 0" xyz="0 0 -0.1"/>
@@ -2628,7 +2628,7 @@
     <axis xyz="1 0 0"/>
     <dynamics damping="0.0" friction="0.0"/>
   </joint>
-  
+
 
   <transmission name="leg_right_1_trans">
     <type>transmission_interface/SimpleTransmission</type>

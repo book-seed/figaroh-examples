@@ -6,9 +6,9 @@ Copyright(c) 2017 PAL Robotics, S.L. All Rights Reserved
 
 This is the Gazebo URDF model for the Intel RealSense D435 camera
 -->
-  
+
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
-  
+
   <xacro:macro name="gazebo_d435" params="camera_name reference_link topics_ns depth_optical_frame color_optical_frame infrared1_optical_frame infrared2_optical_frame publish_pointcloud:=true" >
 
     <!-- Load parameters to model's main link-->

@@ -148,7 +148,7 @@ Where:
 #### Mathematical Formulation
 - **Variables**: Weight w[i] ∈ [0,1] for each candidate configuration i
 - **Objective**: Maximize det(∑ w[i] × R[i]^T × R[i])^(1/n)
-- **Constraints**: 
+- **Constraints**:
   - Sum of weights ≤ 1 (convex combination)
   - Non-negativity of weights
   - Kinematic feasibility of configurations
@@ -206,7 +206,7 @@ subject to:
 #### Constraint Handling
 1. **Kinematic Constraints**:
    - Joint position limits: q_min ≤ q(t) ≤ q_max
-   - Velocity limits: |q̇(t)| ≤ q̇_max  
+   - Velocity limits: |q̇(t)| ≤ q̇_max
    - Acceleration limits: |q̈(t)| ≤ q̈_max
 
 2. **Dynamic Constraints**:
@@ -274,7 +274,7 @@ task.save_results("results/")
 # Kinematic calibration
 python calibration_refactored.py
 
-# Dynamic parameter identification  
+# Dynamic parameter identification
 python identification_refactored.py
 
 # Generate optimal calibration configurations
@@ -293,7 +293,7 @@ python optimal_config_refactored.py -n 15
 # Output: results/ur10_optimal_configurations.yaml
 
 # Generate optimal trajectory for identification
-python optimal_trajectory_refactored.py  
+python optimal_trajectory_refactored.py
 # Output: results/ur10_optimal_trajectory.yaml and .csv
 ```
 
@@ -359,7 +359,7 @@ identification:
 These tools provide scientifically validated improvements to UR10 performance:
 
 - **Accuracy**: Position errors reduced from 5-10mm to <1mm through calibration
-- **Control Performance**: >95% torque prediction accuracy with identified dynamic models  
+- **Control Performance**: >95% torque prediction accuracy with identified dynamic models
 - **Efficiency**: 70-80% reduction in experimental time through optimal design
 - **Reliability**: Mathematical guarantees on parameter observability and estimation quality
 - **Automation**: Minimal manual intervention required for complex optimization problems

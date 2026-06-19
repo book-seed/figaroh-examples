@@ -57,6 +57,8 @@ template = """    x: $x
     pitch: $pitch
     yaw: $yaw
 """
+
+
 ##
 #  Update kinematic parameter file for ur10 robot
 #  \param f_input path to the file containing the current parameters,
@@ -81,7 +83,9 @@ def update_parameters(f_input, f_output, var, calib_config):
                 continue
             for axis, n in axes.items():
                 try:
-                    id = calib_config["param_name"].index(n + "_" + paramToJoint[pname], 0)
+                    id = calib_config["param_name"].index(
+                        n + "_" + paramToJoint[pname], 0
+                    )
                     offset = var[id]
                 except ValueError as exc:
                     offset = 0

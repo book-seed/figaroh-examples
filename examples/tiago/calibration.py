@@ -46,7 +46,8 @@ def parse_args() -> argparse.Namespace:
         help="Path to robot URDF file",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose (INFO) logging",
     )
@@ -83,9 +84,7 @@ def main() -> TiagoCalibration | None:
 
         # create a calibration object from config file
         # del_list=[(0, 1)], 0: numbered marker, 1: numbered sample will be removed
-        tiago_calib = TiagoCalibration(
-            tiago, str(config_path), del_list=[]
-        )
+        tiago_calib = TiagoCalibration(tiago, str(config_path), del_list=[])
         tiago_calib.calib_config["known_baseframe"] = False
         tiago_calib.calib_config["known_tipframe"] = False
 
