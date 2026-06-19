@@ -1,9 +1,9 @@
-# TIAGo Robot Configuration - Unified Format (Standalone)
+# TIAGo Robot Configuration - Unified Format
 # Configuration for PAL Robotics TIAGo humanoid robot
-# This is a standalone configuration without template inheritance
+# Inherits from the shared humanoid_robot.yaml template
 
-# Comment out extends for now to test standalone mode
-# extends: "templates/humanoid_robot.yaml"
+# Extend the humanoid robot template from the shared templates directory
+extends: "../../templates/humanoid_robot.yaml"
 
 # Configuration metadata
 _metadata:
@@ -83,7 +83,7 @@ tasks:
     
     data:
       source_file: "data/calibration/mocap/qualysis_base_hand_calibration.csv"
-      sample_configurations_file: "data/optimal_configs/eye_hand_calibration_tiago_hey5_100.yaml"
+      sample_configurations_file: "data/calibration/optimal_configurations/tiago_calibration_joint_configurations_500_pmb2_hey5.yaml"
       number_of_samples: 500
 
   identification:
@@ -113,7 +113,7 @@ tasks:
       optimization_objectives: ["condition_number", "manipulability"]
       
     output:
-      output_file: "data/optimal_configs/tiago_optimal_configs.yaml"
+      output_file: "data/calibration/optimal_configurations/tiago_optimal_configs.yaml"
 
   optimal_trajectory:      
     enabled: true
@@ -133,7 +133,7 @@ tasks:
       
     output:
       save_trajectory: true
-      output_file: "data/trajectories/_optimal_trajectory.yaml"
+      output_file: "data/trajectories/optimal_trajectory.yaml"
 
 # TIAGo-specific custom parameters
 custom:

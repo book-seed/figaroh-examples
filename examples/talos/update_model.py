@@ -13,8 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Update TALOS URDF model with calibrated parameters.
+
+This script takes the calibration results produced by
+calibration_upperbody.py and writes them into offset.xacro
+and offset.yaml files for use with the TALOS URDF model.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
 import os
+import sys
 from os.path import dirname, join, abspath
+from pathlib import Path
+from typing import Optional
+
 import numpy as np
 
 # update estimated parameters to xacro file for left hand
@@ -43,7 +59,37 @@ for i in range(len(total_list)):
     zero_list = [*zero_list, *total_list[i]]
 
 
-def update_parameters(model, res=None, calib_config=None):
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Update TALOS URDF model with calibrated parameters"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config/talos_unified_config.yaml",
+        help="Path to unified config YAML file",
+    )
+    parser.add_argument(
+        "--urdf",
+        type=str,
+        default="urdf/talos_full_v2.urdf",
+        help="Path to robot URDF file",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose (INFO) logging",
+    )
+    return parser.parse_args()
+
+
+def update_parameters(
+    model,
+    res: Optional[np.ndarray] = None,
+    calib_config: Optional[dict] = None,
+) -> None:
     # If no res provided, load from saved calibration results
     if res is None:
         data_path = join(
@@ -135,42 +181,62 @@ def update_parameters(model, res=None, calib_config=None):
 
 
 if __name__ == "__main__":
-    import sys
-    from pathlib import Path
+    args = parse_args()
+
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
 
     # Add project root to path for imports
     project_root = Path(__file__).parents[2]
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
-    import logging
+    # Validate file existence
+    urdf_path = Path(args.urdf)
+    if not urdf_path.exists():
+        print(f"Error: URDF file not found: {urdf_path}", file=sys.stderr)
+        sys.exit(1)
 
-    logging.basicConfig(level=logging.CRITICAL)
+    config_path = Path(args.config)
+    if not config_path.exists():
+        print(f"Error: Config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
 
     from figaroh.tools.robot import load_robot
     from examples.talos.utils.talos_tools import TALOSCalibration
 
-    # Path to the directory containing this script
-    script_dir = dirname(abspath(__file__))
+    try:
+        # Path to the directory containing this script
+        script_dir = dirname(abspath(__file__))
 
-    # Load robot model
-    print("Loading robot model...")
-    robot = load_robot(
-        "urdf/talos_full_v2.urdf",
-        package_dirs="../../models",
-        load_by_urdf=True,
-    )
+        # Load robot model
+        print("Loading robot model...")
+        robot = load_robot(
+            str(urdf_path),
+            package_dirs="../../models",
+            load_by_urdf=True,
+        )
 
-    # Load calibration configuration
-    print("Loading calibration configuration...")
-    calibration = TALOSCalibration(
-        robot=robot,
-        config_file=join(script_dir, "config/talos_unified_config.yaml"),
-    )
+        # Load calibration configuration
+        print("Loading calibration configuration...")
+        calibration = TALOSCalibration(
+            robot=robot,
+            config_file=str(config_path),
+        )
 
-    # Update model parameters (res will be auto-loaded from file)
-    print("Updating model parameters...")
-    update_parameters(robot, calib_config=calibration.calib_config)
-    print("Model parameters updated successfully.")
-    print(f"  - data/offset.xacro")
-    print(f"  - data/offset.yaml")
+        # Update model parameters (res will be auto-loaded from file)
+        print("Updating model parameters...")
+        update_parameters(robot, calib_config=calibration.calib_config)
+        print("Model parameters updated successfully.")
+        print("  - data/offset.xacro")
+        print("  - data/offset.yaml")
+
+    except Exception as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)

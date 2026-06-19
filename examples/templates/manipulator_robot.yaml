@@ -2,7 +2,7 @@
 # Template for fixed-base manipulator robots (UR10, KUKA, etc.)
 # Extends the base robot configuration with manipulator-specific settings
 
-extends: "base_robot_config.yaml"
+extends: "../../templates/base_robot_config.yaml"
 
 robot:
   type: "manipulator"

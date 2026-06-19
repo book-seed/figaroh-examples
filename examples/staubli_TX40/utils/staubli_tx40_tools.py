@@ -20,6 +20,8 @@ to use the generalized base classes with improved error handling
 and configuration management.
 """
 
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 from scipy import signal
@@ -43,28 +45,33 @@ from figaroh.identification.identification_tools import (
 
 class TX40Identification(BaseIdentification):
     """Staubli TX40-specific dynamic parameter identification class."""
-    
-    def __init__(self, robot, config_file="config/TX40_config.yaml"):
+
+    def __init__(self, robot, config_file: str = "config/TX40_config.yaml") -> None:  # type: ignore[override]
         """Initialize TX40 identification with robot model and configuration.
-        
+
         Args:
             robot: Staubli TX40 robot model loaded with FIGAROH
             config_file: Path to TX40 configuration YAML file
         """
         super().__init__(robot, config_file)
         print("TX40Identification initialized for TX40 robot")
-        
-        # TX40-specific active joints
-        self.active_joints = [
-            "joint_1",
-            "joint_2",
-            "joint_3",
-            "joint_4",
-            "joint_5",
-            "joint_6",
-        ]
-        
-        # Set up active joint indices
+
+        # TX40-specific active joints — read from config if available,
+        # fall back to hardcoded list for backward compatibility
+        config_active_joints = self.identif_config.get("active_joints")
+        if config_active_joints:
+            self.active_joints = config_active_joints
+        else:
+            self.active_joints = [
+                "joint_1",
+                "joint_2",
+                "joint_3",
+                "joint_4",
+                "joint_5",
+                "joint_6",
+            ]
+
+        # Ensure active_joints is set in identif_config for base class use
         self.identif_config["active_joints"] = self.active_joints
         
         # Calculate joint IDs and indices properly
@@ -96,8 +103,9 @@ class TX40Identification(BaseIdentification):
         }
 
     @handle_identification_errors
-    def solve(self, decimate=True, decimation_factor=10, zero_tolerance=0.001,
-              plotting=True, save_results=False, wls=False):
+    def solve(self, decimate: bool = True, decimation_factor: int = 10,
+              zero_tolerance: float = 0.001, plotting: bool = True,
+              save_results: bool = False, wls: bool = False) -> np.ndarray:
         """Solve TX40 identification with optional weighted least squares.
         
         Args:
@@ -135,7 +143,7 @@ class TX40Identification(BaseIdentification):
         return phi_base
     
     @validate_input_data
-    def load_trajectory_data(self):
+    def load_trajectory_data(self) -> dict:  # type: ignore[override]
         """Load and process CSV data for Staubli TX40 robot."""
         try:
             # Load current (torque) and position data
@@ -170,7 +178,7 @@ class TX40Identification(BaseIdentification):
             else:
                 raise e
 
-    def process_kinematics_data(self, filter_config=None):
+    def process_kinematics_data(self, filter_config: dict | None = None) -> None:
         """Apply TX40-specific filtering to data."""
         # TX40-specific filter parameters
         filter_config = self.filter_config
@@ -216,7 +224,7 @@ class TX40Identification(BaseIdentification):
         # Update raw data with converted positions
         self.raw_data["positions"] = joint_positions
 
-    def process_torque_data(self):
+    def process_torque_data(self) -> np.ndarray:
         """Process torque data with TX40-specific motor torque conversion."""
         filter_config = self.filter_config
         # Get reduction ratios from config
@@ -279,7 +287,7 @@ class TX40Identification(BaseIdentification):
                         :min_length, :
                     ]
 
-    def add_additional_parameters(self):
+    def add_additional_parameters(self) -> None:
         """Add additional parameters specific to TX40 and recalculate dynamic regressor."""
         # Add coupling parameters if present
         if self.identif_config.get("has_coupled_wrist", False):
@@ -307,6 +315,7 @@ class TX40Identification(BaseIdentification):
                 self.processed_data["velocities"],
                 self.processed_data["accelerations"]
             )
+
     def _add_coupling(self, W, model, data, N, nq, nv, njoints, q, v, a):
         """Add TX40-specific wrist coupling to regressor matrix.
         

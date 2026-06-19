@@ -6,6 +6,9 @@
 
 set -e  # Exit on error
 
+# Clean up temporary files on exit or interrupt
+trap 'rm -f "$NEW_DIR"/*.tmp "$NEW_DIR"/*/*.tmp 2>/dev/null' EXIT INT TERM
+
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -41,7 +44,12 @@ fi
 ROBOT_NAME=$1
 ROBOT_NAME_LOWER=$(echo "$ROBOT_NAME" | tr '[:upper:]' '[:lower:]')
 ROBOT_NAME_UPPER=$(echo "$ROBOT_NAME" | tr '[:lower:]' '[:upper:]')
-ROBOT_NAME_TITLE=$(echo "$ROBOT_NAME" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
+# Determine title case: preserve all-caps acronyms (e.g., UR10, TX40), else capitalize first letter
+if [[ "$ROBOT_NAME" =~ ^[A-Z0-9_]+$ ]]; then
+    ROBOT_NAME_TITLE="$ROBOT_NAME"
+else
+    ROBOT_NAME_TITLE=$(echo "$ROBOT_NAME" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
+fi
 
 # Get the script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -91,13 +99,18 @@ mkdir -p "$NEW_DIR/utils"
 print_success "Directory structure created!"
 
 # Function to replace robot name in content
+# Replaces longer placeholder strings first to prevent substring interference
 replace_robot_name() {
     local content="$1"
-    # Replace various forms of the robot name
+    # Ordered by descending placeholder length: longer patterns first
+    # Generic placeholders used in templates
+    content="${content//ROBOT_TITLE/$ROBOT_NAME_TITLE}"
+    content="${content//robot_lower/$ROBOT_NAME_LOWER}"
+    # TIAGo-specific pattern replacements (for template compatibility)
     content="${content//TIAGo/$ROBOT_NAME_TITLE}"
+    content="${content//TIAGO/$ROBOT_NAME_UPPER}"
     content="${content//Tiago/$ROBOT_NAME_TITLE}"
     content="${content//tiago/$ROBOT_NAME_LOWER}"
-    content="${content//TIAGO/$ROBOT_NAME_UPPER}"
     echo "$content"
 }
 

@@ -13,40 +13,93 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import argparse
 import logging
 import sys
 from pathlib import Path
-
-# Configure logging at application entry point
-logging.basicConfig(
-    level=logging.CRITICAL,
-    format="%(name)s - %(levelname)s - %(message)s",
-)
 
 # Add project root to path for imports (prefer `pip install -e .` instead)
 project_root = Path(__file__).parents[2]
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from examples.tiago.utils.tiago_tools import TiagoCalibration
-from figaroh.tools.robot import load_robot
+import yaml  # noqa: E402
+from examples.tiago.utils.tiago_tools import TiagoCalibration  # noqa: E402
+from figaroh.tools.robot import load_robot  # noqa: E402
 
 
-# load_by_urdf = False, load robot from rospy.get_param(/robot_description)
-tiago = load_robot(
-    "urdf/tiago_48_schunk.urdf",
-    load_by_urdf=True,
-    robot_pkg="tiago_description"
-)
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="TIAGo kinematic calibration")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config/tiago_unified_config.yaml",
+        help="Path to unified config YAML file",
+    )
+    parser.add_argument(
+        "--urdf",
+        type=str,
+        default="urdf/tiago_48_schunk.urdf",
+        help="Path to robot URDF file",
+    )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable verbose (INFO) logging",
+    )
+    return parser.parse_args()
 
-# create a calibration object from config file
-# del_list=[(0, 1)], 0: numbered marker, 1: numbered sample will be removed
-tiago_calib = TiagoCalibration(tiago, "config/tiago_unified_config.yaml", del_list=[])
-tiago_calib.calib_config["known_baseframe"] = False
-tiago_calib.calib_config["known_tipframe"] = False
 
-# load data file and determine parameters to be calibrated
-tiago_calib.initialize()
+def main() -> TiagoCalibration | None:
+    """Run TIAGo kinematic calibration."""
+    args = parse_args()
 
-# solve least_squares estimation
-tiago_calib.solve(plotting=True, enable_logging=False)
+    # Configure logging after parsing args
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
+    # Validate files exist
+    config_path = Path(args.config)
+    urdf_path = Path(args.urdf)
+    if not config_path.exists():
+        print(f"Error: Config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
+    if not urdf_path.exists():
+        print(f"Error: URDF file not found: {urdf_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        # load_by_urdf = False, load robot from rospy.get_param(/robot_description)
+        tiago = load_robot(
+            str(urdf_path),
+            load_by_urdf=True,
+            robot_pkg="tiago_description",
+        )
+
+        # create a calibration object from config file
+        # del_list=[(0, 1)], 0: numbered marker, 1: numbered sample will be removed
+        tiago_calib = TiagoCalibration(
+            tiago, str(config_path), del_list=[]
+        )
+        tiago_calib.calib_config["known_baseframe"] = False
+        tiago_calib.calib_config["known_tipframe"] = False
+
+        # load data file and determine parameters to be calibrated
+        tiago_calib.initialize()
+
+        # solve least_squares estimation
+        tiago_calib.solve(plotting=True, enable_logging=False)
+
+        return tiago_calib
+    except Exception as e:
+        print(f"Error during calibration: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

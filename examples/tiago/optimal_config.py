@@ -13,62 +13,97 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import argparse
 import logging
 import sys
 from pathlib import Path
-
-# Configure logging at application entry point
-logging.basicConfig(
-    level=logging.CRITICAL,
-    format="%(name)s - %(levelname)s - %(message)s",
-)
 
 # Add project root to path for imports (prefer `pip install -e .` instead)
 project_root = Path(__file__).parents[2]
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from examples.tiago.utils.tiago_tools import TiagoOptimalCalibration
-from figaroh.tools.robot import load_robot
-import argparse
+from examples.tiago.utils.tiago_tools import TiagoOptimalCalibration  # noqa: E402
+from figaroh.tools.robot import load_robot  # noqa: E402
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="parse calibration setups", add_help=False
+        description="TIAGo optimal configuration generation for calibration"
     )
     parser.add_argument(
-        "-e", "--end_effector", default="hey5", dest="end_effector"
+        "--config",
+        type=str,
+        default="config/tiago_config_hey5.yaml",
+        help="Path to config YAML file (legacy or unified format)",
     )
     parser.add_argument(
-        "-u", "--load_by_urdf", default=True, dest="load_by_urdf"
+        "--urdf",
+        type=str,
+        default="urdf/tiago_48_hey5.urdf",
+        help="Path to robot URDF file",
     )
-    args = parser.parse_args()
-    return args
+    parser.add_argument(
+        "--end-effector", "-e",
+        type=str,
+        default="hey5",
+        dest="end_effector",
+        help="End-effector type (hey5, schunk, etc.)",
+    )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable verbose (INFO) logging",
+    )
+    return parser.parse_args()
 
 
-def main():
+def main() -> None:
+    """Run TIAGo optimal configuration generation."""
     args = parse_args()
-    if args is not None:
-        end_effector = args.end_effector
-    else:
-        end_effector = "hey5"
 
-    # Load robot model
-    tiago = load_robot(
-        "urdf/tiago_48_{}.urdf".format(args.end_effector),
-        load_by_urdf=True,
-        robot_pkg="tiago_description",
+    # Configure logging after parsing args
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    # Create optimal calibration object
-    tiago_optcalib = TiagoOptimalCalibration(
-        tiago, "config/tiago_config_{}.yaml".format(args.end_effector)
-    )
-    
-    # Solve for optimal configurations  
-    print(f"Generating optimal configurations for TIAGo with {args.end_effector} end effector...")
-    tiago_optcalib.solve(save_file=False)  # Skip writing to file for now
+    # Validate files exist
+    config_path = Path(args.config)
+    urdf_path = Path(args.urdf)
+    if not config_path.exists():
+        print(f"Error: Config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
+    if not urdf_path.exists():
+        print(f"Error: URDF file not found: {urdf_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        # Load robot model
+        tiago = load_robot(
+            str(urdf_path),
+            load_by_urdf=True,
+            robot_pkg="tiago_description",
+        )
+
+        # Create optimal calibration object
+        tiago_optcalib = TiagoOptimalCalibration(tiago, str(config_path))
+
+        # Solve for optimal configurations
+        print(
+            f"Generating optimal configurations for TIAGo "
+            f"with {args.end_effector} end effector..."
+        )
+        tiago_optcalib.solve(save_file=False)  # Skip writing to file for now
+    except Exception as e:
+        print(
+            f"Error during optimal configuration generation: {e}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":

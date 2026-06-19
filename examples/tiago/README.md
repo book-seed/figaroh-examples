@@ -287,10 +287,30 @@ pip install -e .
 
 ### Configuration Files
 
-Each script uses YAML configuration files:
-- `config/tiago_config.yaml`: Main calibration parameters
-- `config/tiago_config_hey5.yaml`: Hey5 gripper specific settings
-- `config/tiago_config_schunk.yaml`: Schunk gripper specific settings
+All scripts default to using the unified configuration:
+- `config/tiago_unified_config.yaml` (**default**): Main unified config with template inheritance
+- `config/tiago_config_hey5.yaml`: Legacy config for TIAGo with Hey5 hand
+- `config/tiago_config.yaml`: Legacy config for TIAGo with Schunk hand
+
+Legacy and broken configs have been moved to `config/archive/`. See `config/README.md` for details.
+
+Override the default config with `--config <path>` on any script.
+
+### Usage
+
+```bash
+# Kinematic calibration (defaults to unified config)
+python calibration.py
+
+# Dynamic parameter identification
+python identification.py
+
+# Optimal configuration generation (specify end-effector)
+python optimal_config.py --end-effector hey5
+
+# Optimal trajectory generation (requires IPOPT)
+python optimal_trajectory.py
+```
 
 ## Architecture
 

@@ -36,6 +36,7 @@ venv.bak/
 *.swo
 *~
 .github/
+!.github/workflows/
 .waylog/
 
 # OS

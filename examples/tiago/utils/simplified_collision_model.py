@@ -13,49 +13,122 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
+from __future__ import annotations
+
+from os.path import abspath, dirname, join
+from typing import Any, List
+
 import hppfcl
+import numpy as np
+import numpy.typing as npt
 import pinocchio as pin
 import time
 
 from figaroh.tools.robotcollisions import CollisionWrapper
 from figaroh.visualisation.visualizer import MeshcatVisualizer
 
-from os.path import dirname, join, abspath
 
+def Capsule(
+    name: str,
+    joint: int,
+    radius: float,
+    length: float,
+    placement: Any,
+    color: List[float] | None = None,
+) -> pin.GeometryObject:
+    """Create a Pinocchio::FCL geometry capsule (cylinder workaround).
 
-def Capsule(name, joint, radius, length, placement, color=[0.7, 0.7, 0.98, 1]):
-    """Create a Pinocchio::FCL::Capsule to be added in the Geom-Model."""
+    Args:
+        name: Name of the geometry object
+        joint: Joint index to attach the geometry to
+        radius: Cylinder radius
+        length: Cylinder length
+        placement: SE3 placement relative to joint frame
+        color: RGBA color vector (default: light blue)
+
+    Returns:
+        Pinocchio geometry object
+    """
+    if color is None:
+        color = [0.7, 0.7, 0.98, 1.0]
     # They should be capsules ... but hppfcl current version is buggy with Capsules...
-    # hppgeom = hppfcl.Capsule(radius,length)
+    # hppgeom = hppfcl.Capsule(radius, length)
     hppgeom = hppfcl.Cylinder(radius, length)
     geom = pin.GeometryObject(name, joint, hppgeom, placement)
     geom.meshColor = np.array(color)
     return geom
 
 
-def Box(name, joint, x, y, z, placement, color=[0.7, 0.7, 0.98, 1]):
-    """Create a Pinocchio::FCL::Capsule to be added in the Geom-Model."""
-    # They should be capsules ... but hppfcl current version is buggy with Capsules...
-    # hppgeom = hppfcl.Capsule(radius,length)
+def Box(
+    name: str,
+    joint: int,
+    x: float,
+    y: float,
+    z: float,
+    placement: Any,
+    color: List[float] | None = None,
+) -> pin.GeometryObject:
+    """Create a Pinocchio::FCL box geometry.
+
+    Args:
+        name: Name of the geometry object
+        joint: Joint index to attach the geometry to
+        x: Box dimension along X
+        y: Box dimension along Y
+        z: Box dimension along Z
+        placement: SE3 placement relative to joint frame
+        color: RGBA color vector (default: light blue)
+
+    Returns:
+        Pinocchio geometry object
+    """
+    if color is None:
+        color = [0.7, 0.7, 0.98, 1.0]
     hppgeom = hppfcl.Box(x, y, z)
     geom = pin.GeometryObject(name, joint, hppgeom, placement)
     geom.meshColor = np.array(color)
     return geom
 
 
-def Sphere(name, joint, radius, placement, color=[0.7, 0.7, 0.98, 1]):
-    """Create a Pinocchio::FCL::Capsule to be added in the Geom-Model."""
+def Sphere(
+    name: str,
+    joint: int,
+    radius: float,
+    placement: Any,
+    color: List[float] | None = None,
+) -> pin.GeometryObject:
+    """Create a Pinocchio::FCL sphere geometry.
+
+    Args:
+        name: Name of the geometry object
+        joint: Joint index to attach the geometry to
+        radius: Sphere radius
+        placement: SE3 placement relative to joint frame
+        color: RGBA color vector (default: light blue)
+
+    Returns:
+        Pinocchio geometry object
+    """
+    if color is None:
+        color = [0.7, 0.7, 0.98, 1.0]
     hppgeom = hppfcl.Sphere(radius)
     geom = pin.GeometryObject(name, joint, hppgeom, placement)
     geom.meshColor = np.array(color)
     return geom
 
 
-def build_tiago_simplified(robot):
-    # visual_model = robot.visual_model
-    # geom_model = robot.robot.geom_model
+def build_tiago_simplified(robot: Any) -> Any:
+    """Build a simplified collision model for TIAGo.
 
+    Adds box and capsule collision geometries for the torso, base,
+    forearm, and head of the TIAGo robot.
+
+    Args:
+        robot: TIAGo robot model (with model, geom_model, visual_model)
+
+    Returns:
+        Robot model with added collision geometries
+    """
     xyz_1 = np.array([-0.028, 0, -0.01])
     xyz_2 = np.array([0.005, 0, -0.35])
     xyz_3 = np.array([0, 0, 0.20])
@@ -151,9 +224,12 @@ def build_tiago_simplified(robot):
     )
 
     for k in range(len(robot.geom_model.geometryObjects)):
-        print("object number %d" % k, robot.geom_model.geometryObjects[k].name)
+        print(
+            "object number %d" % k,
+            robot.geom_model.geometryObjects[k].name,
+        )
 
-    arm_link_names = [
+    arm_link_names: List[str] = [
         "forearm_cap"
         # "arm_4_link_0",
         # "arm_5_link_0",
@@ -162,7 +238,7 @@ def build_tiago_simplified(robot):
         # "wrist_ft_tool_link_0",
     ]
     arm_link_ids = [robot.geom_model.getGeometryId(k) for k in arm_link_names]
-    mask_link_names = [
+    mask_link_names: List[str] = [
         "torso_up_box",
         "torso_low_box",
         "base_cap",
@@ -178,5 +254,3 @@ def build_tiago_simplified(robot):
     )
 
     return robot
-
-

@@ -2,7 +2,7 @@
 
 > Generated: Fri Jun 19 2026
 > Source: Cross-example audit of UR10, TIAGo, TALOS, Staubli TX40 + shared infrastructure
-> Status: Draft for iteration
+> Status: Phases 1-6 complete (39/39 items). Phase 7 (new examples) deferred.
 
 ---
 
@@ -49,7 +49,7 @@ Fix things that are actively broken or produce wrong results. No dependencies be
 - **Action:** Add missing sections to mock configs; fix legacy test expectations
 - **Effort:** M
 - **Dependencies:** None
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 1.2 Fix TALOS update_model.py path bug
 - **Scope:** TALOS
@@ -58,7 +58,7 @@ Fix things that are actively broken or produce wrong results. No dependencies be
 - **Action:** Remove one `dirname()` call so output goes to `talos/data/`
 - **Effort:** S
 - **Dependencies:** None
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 1.3 Connect TALOS update_model.py to calibration
 - **Scope:** TALOS
@@ -67,7 +67,7 @@ Fix things that are actively broken or produce wrong results. No dependencies be
 - **Action:** Have calibration save `res` to file (e.g. `data/calibration_results.npz`); update_model reads it
 - **Effort:** M
 - **Dependencies:** 1.2 (fix path first)
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 1.4 Fix UR10 identification.py — uncomment main()
 - **Scope:** UR10
@@ -76,7 +76,7 @@ Fix things that are actively broken or produce wrong results. No dependencies be
 - **Action:** Uncomment `main()`, add `if __name__ == "__main__": main()`, remove module-level execution
 - **Effort:** S
 - **Dependencies:** None
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 1.5 Fix TIAGo broken data file paths
 - **Scope:** TIAGo
@@ -85,7 +85,7 @@ Fix things that are actively broken or produce wrong results. No dependencies be
 - **Action:** Either remove configs with missing data, add the data files, or fix the paths to point to existing data
 - **Effort:** M
 - **Dependencies:** None
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 1.6 Fix Staubli dead import
 - **Scope:** Staubli TX40
@@ -94,7 +94,7 @@ Fix things that are actively broken or produce wrong results. No dependencies be
 - **Action:** Remove dead import and fallback; use direct YAML loading
 - **Effort:** S
 - **Dependencies:** None
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 1.7 Fix package_dirs path bugs
 - **Scope:** Staubli TX40, TALOS
@@ -103,7 +103,7 @@ Fix things that are actively broken or produce wrong results. No dependencies be
 - **Action:** Standardize to `"../../models"` (relative from `examples/<robot>/`)
 - **Effort:** S
 - **Dependencies:** None
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ---
 
@@ -117,7 +117,7 @@ Quick wins, mechanical fixes. No dependencies. Can run in parallel with Phase 1.
 - **Problem:** Print statement says "TX40 DYNAMIC PARAMETER IDENTIFICATION RESULTS" — copy-paste from Staubli
 - **Action:** Change to "TIAGo"
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 2.2 Fix "TIAGo" in Staubli tools
 - **Scope:** Staubli TX40
@@ -125,7 +125,7 @@ Quick wins, mechanical fixes. No dependencies. Can run in parallel with Phase 1.
 - **Problem:** Print statement says "TiagoIdentification initialized for TIAGo robot" — copy-paste from TIAGo
 - **Action:** Change to "TX40"
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 2.3 Fix "colission" typo everywhere
 - **Scope:** shared, TIAGo
@@ -133,7 +133,7 @@ Quick wins, mechanical fixes. No dependencies. Can run in parallel with Phase 1.
 - **Problem:** "colission" should be "collision" — propagates from create_example.sh to all generated examples
 - **Action:** Rename file, update all imports and references, fix create_example.sh
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ---
 
@@ -148,7 +148,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Action:** Wrap entry-point logic in `main()`, add `if __name__ == "__main__": main()`
 - **Effort:** S
 - **Dependencies:** 1.4 (UR10 identification main() fix)
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 3.2 Fix logging levels
 - **Scope:** ALL examples
@@ -156,7 +156,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Problem:** All scripts set `level=logging.CRITICAL` — suppresses all debug/info output, opposite of what you'd want
 - **Action:** Change to `logging.INFO` (or `logging.WARNING` with `--verbose` flag for INFO)
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 3.3 Add argparse/CLI to all entry-point scripts
 - **Scope:** ALL examples
@@ -164,7 +164,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Problem:** No CLI interface — users must edit source to change anything. Only TIAGo's optimal_config.py has argparse.
 - **Action:** Add at minimum `--config`, `--urdf`, `--verbose` flags to each script
 - **Effort:** M
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 3.4 Add file existence validation + error handling
 - **Scope:** ALL examples
@@ -172,7 +172,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Problem:** No file existence checks, no try/except at entry points — users get cryptic Pinocchio/Python errors on missing files
 - **Action:** Add validation before loading (URDF, config, data files); wrap in try/except with user-friendly error messages
 - **Effort:** M
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 3.5 Move hardcoded joint params to YAML config
 - **Scope:** UR10, TIAGo, Staubli
@@ -181,7 +181,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Action:** Move all joint parameters into the unified config YAML; scripts read from config
 - **Effort:** L
 - **Dependencies:** 3.3 (argparse for --config)
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 3.6 Eliminate DRY violations
 - **Scope:** UR10, TIAGo
@@ -190,7 +190,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Action:** Extract to config (done in 3.5) or shared utils; single source of truth
 - **Effort:** M
 - **Dependencies:** 3.5
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 3.7 Add type hints to all public functions/methods
 - **Scope:** ALL examples
@@ -198,7 +198,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Problem:** Zero type annotations anywhere
 - **Action:** Add type hints to all public functions and method signatures
 - **Effort:** M
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ---
 
@@ -211,7 +211,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Action:** Remove or archive broken/unused configs; keep only working configs; document which to use
 - **Effort:** M
 - **Dependencies:** 1.5 (fix broken paths first)
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 4.2 Enable extends in TIAGo unified config
 - **Scope:** TIAGo
@@ -220,7 +220,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Action:** Uncomment `extends: "templates/humanoid_robot.yaml"` and verify it works
 - **Effort:** S
 - **Dependencies:** 4.1
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 4.3 Remove duplicate base_robot_config.yaml
 - **Scope:** TALOS, Staubli
@@ -228,7 +228,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Problem:** Copied into config dirs instead of referenced via template inheritance — template updates won't propagate
 - **Action:** Remove local copies; rely on `extends` chain to templates
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 4.4 Standardize package_dirs across all examples
 - **Scope:** ALL examples
@@ -237,7 +237,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Action:** Pick one pattern (likely `"../../models"`) and apply everywhere
 - **Effort:** S
 - **Dependencies:** 1.7 (Phase 1 path fix)
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 4.5 Replace URDF copies with symlinks to models/
 - **Scope:** ALL examples
@@ -245,7 +245,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Problem:** URDFs are full copies (TIAGo has 7 copies, 72-129KB each); version drift risk; models/ also has copies
 - **Action:** Replace with symlinks to `models/` where possible, or at minimum document the duplication
 - **Effort:** M
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 4.6 Fix config references to non-existent files
 - **Scope:** TALOS, TIAGo
@@ -253,7 +253,7 @@ Apply consistently across all 4 examples. Best done per-example to keep changes 
 - **Problem:** `sample_configurations_file` paths point to missing `data/optimal_configs/` directories
 - **Action:** Remove references or create the directories/files
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ---
 
@@ -267,7 +267,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Problem:** Always returns True — placeholder code providing false confidence
 - **Action:** Remove function and all calls
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 5.2 Remove _save_tx40_parameters()
 - **Scope:** Staubli TX40
@@ -275,7 +275,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Problem:** Method defined but never called — dead code
 - **Action:** Remove method
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 5.3 Remove build_tiago_normal()
 - **Scope:** TIAGo
@@ -283,7 +283,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Problem:** Function never called — dead code
 - **Action:** Remove function
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 5.4 Fix or remove broken main() in collision model
 - **Scope:** TIAGo
@@ -292,7 +292,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Action:** Fix import to `from examples.tiago.utils.tiago_tools import ...` or remove main() if not needed
 - **Effort:** S
 - **Dependencies:** 2.3 (filename rename)
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 5.5 Remove dead data_type parameter
 - **Scope:** TALOS
@@ -300,7 +300,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Problem:** `data_type` parameter accepted but never used
 - **Action:** Remove from function signature
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 5.6 Remove commented-out CSV writer block
 - **Scope:** TALOS
@@ -308,7 +308,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Problem:** Commented-out code block for saving estimation results to CSV — never used
 - **Action:** Remove commented block
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ---
 
@@ -321,7 +321,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Action:** Add workflow that runs pytest on push/PR, activates `figaroh-dev` conda env
 - **Effort:** M
 - **Dependencies:** 1.1 (tests must pass first)
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 6.2 Fix run_tests.py
 - **Scope:** shared
@@ -329,7 +329,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Problem:** Only runs 3 of 8 test files; parses stdout instead of using pytest API
 - **Action:** Include all test files; use pytest API or just document `pytest` as the runner
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 6.3 Fix web-interface config discovery
 - **Scope:** shared
@@ -337,7 +337,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Problem:** Looks for `config.yaml`, `calibration.yaml` etc. but examples use `*_unified_config.yaml` — no configs discovered
 - **Action:** Update discovery to look for `*_unified_config.yaml` patterns
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 6.4 Expand templates README
 - **Scope:** shared
@@ -345,7 +345,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Problem:** Only 14 lines, no examples of `extends`, `inherits_from`, `variants`
 - **Action:** Add usage examples and explanations for template inheritance features
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 6.5 Fix create_example.sh bugs
 - **Scope:** shared
@@ -354,7 +354,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Action:** Fix awk title-case logic; fix replace order; add trap for cleanup
 - **Effort:** M
 - **Dependencies:** 2.3 (colission typo fix)
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 6.6 Add end-to-end smoke tests
 - **Scope:** shared
@@ -363,7 +363,7 @@ No dependencies. Can run in parallel with earlier phases.
 - **Action:** Add smoke tests that verify each example script imports and initializes without crashing
 - **Effort:** M
 - **Dependencies:** Phases 1-3 (scripts must be fixed first)
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ---
 
@@ -375,26 +375,26 @@ New feature work, not cleanup. Should come after Phases 1-6 so new scripts follo
 - **Scope:** TALOS
 - **Scripts:** `identification.py`, `optimal_config.py`, `optimal_trajectory.py`
 - **Effort:** L
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 7.2 Add missing scripts to Staubli TX40
 - **Scope:** Staubli TX40
 - **Scripts:** `calibration.py`, `optimal_config.py`, `optimal_trajectory.py`, `update_model.py`
 - **Effort:** L
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 7.3 Add update_model.py to TIAGo
 - **Scope:** TIAGo
 - **Scripts:** `update_model.py`
 - **Effort:** M
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ### 7.4 Rename TALOS calibration_upperbody.py
 - **Scope:** TALOS
 - **Problem:** Named `calibration_upperbody.py` instead of `calibration.py` — inconsistent with convention
 - **Action:** Rename to `calibration.py` (or document why it differs)
 - **Effort:** S
-- **Status:** [ ] not started
+- **Status:** [x] completed
 
 ---
 

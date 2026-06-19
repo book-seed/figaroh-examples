@@ -13,121 +13,169 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import argparse
 import logging
 import sys
 from pathlib import Path
-
-# Configure logging at application entry point
-logging.basicConfig(
-    level=logging.CRITICAL,
-    format="%(name)s - %(levelname)s - %(message)s",
-)
 
 # Add project root to path for imports (prefer `pip install -e .` instead)
 project_root = Path(__file__).parents[2]
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
-from examples.tiago.utils.tiago_tools import TiagoIdentification
-from figaroh.tools.robot import load_robot
+
+import yaml  # noqa: E402
+from examples.tiago.utils.tiago_tools import TiagoIdentification  # noqa: E402
+from figaroh.tools.robot import load_robot  # noqa: E402
 
 
-def main():
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="TIAGo dynamic parameter identification"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config/tiago_unified_config.yaml",
+        help="Path to unified config YAML file",
+    )
+    parser.add_argument(
+        "--urdf",
+        type=str,
+        default="urdf/tiago_48_schunk.urdf",
+        help="Path to robot URDF file",
+    )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable verbose (INFO) logging",
+    )
+    return parser.parse_args()
+
+
+def main() -> TiagoIdentification | None:
     """Main function for Tiago dynamic parameter identification."""
-    # Load robot model
-    tiago = load_robot(
-        "urdf/tiago_48_schunk.urdf",
-        load_by_urdf=True,
-        robot_pkg="tiago_description"
+    args = parse_args()
+
+    # Configure logging after parsing args
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    # Create identification object
-    tiago_iden = TiagoIdentification(tiago, "config/tiago_unified_config.yaml")
+    # Validate files exist
+    config_path = Path(args.config)
+    urdf_path = Path(args.urdf)
+    if not config_path.exists():
+        print(f"Error: Config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
+    if not urdf_path.exists():
+        print(f"Error: URDF file not found: {urdf_path}", file=sys.stderr)
+        sys.exit(1)
 
-    # Define additional parameters excluded from yaml files
-    ps = tiago_iden.identif_config
-    ps["reduction_ratio"] = {
-        "torso_lift_joint": 1,
-        "arm_1_joint": 100,
-        "arm_2_joint": 100,
-        "arm_3_joint": 100,
-        "arm_4_joint": 100,
-        "arm_5_joint": 336,
-        "arm_6_joint": 336,
-        "arm_7_joint": 336,
-    }
-    ps["kmotor"] = {
-        "torso_lift_joint": 1,
-        "arm_1_joint": 0.136,
-        "arm_2_joint": 0.136,
-        "arm_3_joint": -0.087,
-        "arm_4_joint": -0.087,
-        "arm_5_joint": -0.0613,
-        "arm_6_joint": -0.0613,
-        "arm_7_joint": -0.0613,
-    }
+    try:
+        # Load robot model
+        tiago = load_robot(
+            str(urdf_path),
+            load_by_urdf=True,
+            robot_pkg="tiago_description",
+        )
 
-    ps["active_joints"] = [
-        "torso_lift_joint",
-        "arm_1_joint",
-        "arm_2_joint",
-        "arm_3_joint",
-        "arm_4_joint",
-        "arm_5_joint",
-        "arm_6_joint",
-        "arm_7_joint",
-    ]
+        # Create identification object
+        tiago_iden = TiagoIdentification(tiago, str(config_path))
 
-    # Joint parameters
-    ps["act_Jid"] = [tiago_iden.model.getJointId(i) for i in ps["active_joints"]]
-    ps["act_J"] = [tiago_iden.model.joints[jid] for jid in ps["act_Jid"]]
-    ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
-    ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
+        # Define additional parameters excluded from yaml files
+        ps = tiago_iden.identif_config
+        ps["reduction_ratio"] = {
+            "torso_lift_joint": 1,
+            "arm_1_joint": 100,
+            "arm_2_joint": 100,
+            "arm_3_joint": 100,
+            "arm_4_joint": 100,
+            "arm_5_joint": 336,
+            "arm_6_joint": 336,
+            "arm_7_joint": 336,
+        }
+        ps["kmotor"] = {
+            "torso_lift_joint": 1,
+            "arm_1_joint": 0.136,
+            "arm_2_joint": 0.136,
+            "arm_3_joint": -0.087,
+            "arm_4_joint": -0.087,
+            "arm_5_joint": -0.0613,
+            "arm_6_joint": -0.0613,
+            "arm_7_joint": -0.0613,
+        }
 
-    # Dataset paths
-    ps["pos_data"] = "data/identification/dynamic/tiago_position.csv"
-    ps["vel_data"] = "data/identification/dynamic/tiago_velocity.csv"
-    ps["torque_data"] = "data/identification/dynamic/tiago_effort.csv"
+        # Read active joints from config (instead of hardcoding)
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f)
+        active_joints = cfg["robot"]["properties"]["joints"]["active_joints"]
+        ps["active_joints"] = active_joints
 
-    # Initialize identification process
-    # Note: truncate parameter now accepts:
-    # - None: no truncation
-    # - (start, end): custom truncation indices
-    tiago_iden.initialize(truncate=(921, 6791))
+        # Joint parameters
+        ps["act_Jid"] = [
+            tiago_iden.model.getJointId(i) for i in ps["active_joints"]
+        ]
+        ps["act_J"] = [tiago_iden.model.joints[jid] for jid in ps["act_Jid"]]
+        ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
+        ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
 
-    # Solve identification
-    tiago_iden.solve(
-        decimate=True,
-        plotting=True,
-        save_results=False,
-    )
+        # Dataset paths
+        ps["pos_data"] = "data/identification/dynamic/tiago_position.csv"
+        ps["vel_data"] = "data/identification/dynamic/tiago_velocity.csv"
+        ps["torque_data"] = "data/identification/dynamic/tiago_effort.csv"
 
-    # Print results summary
-    print("\n" + "=" * 60)
-    print("TIAGo DYNAMIC PARAMETER IDENTIFICATION RESULTS")
-    print("=" * 60)
+        # Initialize identification process
+        # Note: truncate parameter now accepts:
+        # - None: no truncation
+        # - (start, end): custom truncation indices
+        tiago_iden.initialize(truncate=(921, 6791))
 
-    print(
-        f"Number of base parameters identified: "
-        f"{len(tiago_iden.params_base)}"
-    )
-    print(f"Correlation coefficient: {tiago_iden.correlation:.4f}")
+        # Solve identification
+        tiago_iden.solve(
+            decimate=True,
+            plotting=True,
+            save_results=False,
+        )
 
-    if hasattr(tiago_iden, 'result'):
-        for key, value in tiago_iden.result.items():
-            if isinstance(value, (int, float)):
-                if isinstance(value, float):
-                    print(f"{key}: {value:.6f}")
+        # Print results summary
+        print("\n" + "=" * 60)
+        print("TIAGo DYNAMIC PARAMETER IDENTIFICATION RESULTS")
+        print("=" * 60)
+
+        print(
+            f"Number of base parameters identified: "
+            f"{len(tiago_iden.params_base)}"
+        )
+        print(f"Correlation coefficient: {tiago_iden.correlation:.4f}")
+
+        if hasattr(tiago_iden, 'result'):
+            for key, value in tiago_iden.result.items():
+                if isinstance(value, (int, float)):
+                    if isinstance(value, float):
+                        print(f"{key}: {value:.6f}")
+                    else:
+                        print(f"{key}: {value}")
                 else:
-                    print(f"{key}: {value}")
-            else:
-                print(f"{key}: {type(value).__name__} of length {len(value)}")
+                    print(
+                        f"{key}: {type(value).__name__} of length {len(value)}"
+                    )
 
-    print("\nBase parameters:")
-    for i, param_name in enumerate(tiago_iden.params_base):
-        print(f"{i + 1:2d}. {param_name}: {tiago_iden. phi_base[i]:10.6f}")
+        print("\nBase parameters:")
+        for i, param_name in enumerate(tiago_iden.params_base):
+            print(f"{i + 1:2d}. {param_name}: {tiago_iden.phi_base[i]:10.6f}")
 
-    print("\nIdentification completed successfully!")
-    return tiago_iden
+        print("\nIdentification completed successfully!")
+        return tiago_iden
+    except Exception as e:
+        print(
+            f"Error during identification: {e}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":

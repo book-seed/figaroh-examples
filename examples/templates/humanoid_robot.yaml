@@ -2,7 +2,7 @@
 # Template for humanoid robots (TIAGo, TALOS, etc.)
 # Extends the base robot configuration with humanoid-specific settings
 
-extends: "base_robot_config.yaml"
+extends: "../../templates/base_robot_config.yaml"
 
 robot:
   type: "humanoid"

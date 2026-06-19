@@ -78,8 +78,9 @@ shared `models/` (robot description packages) and a Viser-based `web-interface/`
 - Templates live in `examples/templates/` (`base_robot_config.yaml`,
   `manipulator_robot.yaml`, `humanoid_robot.yaml`). Use `extends:` (not `inherit_from`).
   Keep robot specifics under `robot.properties.*`, task specifics under `tasks.<task>.*`.
-- TIAGo has ~10 config files in mixed formats with `extends:` commented out and several
-  referencing missing CSVs — treat `examples/tiago/config/` as partially broken.
+- TIAGo config files were consolidated in Phase 4 — broken/unused configs moved to
+  `config/archive/`, 3 active configs remain. See `config/README.md` for details.
+  `extends` is now enabled in `tiago_unified_config.yaml`.
 
 ## Gotchas
 
@@ -87,27 +88,25 @@ shared `models/` (robot description packages) and a Viser-based `web-interface/`
   `examples/shared/`). `examples/__init__.py` still does `from .shared import (...)`
   inside a `try/except`, so it silently no-ops. **Do not import or rely on
   `examples.shared.*`.** (Staubli's dead `ConfigManager` import was removed in Phase 1.)
-- **Logging is set to `CRITICAL`** in every entry-point script (`logging.basicConfig(
-  level=logging.CRITICAL)`), so debug/info output is suppressed. Change to `INFO` locally
-  if you need output; don't assume silence means success. (Phase 3 §3.2 will fix this.)
-- **`create_example.sh` has known bugs**: title-casing produces `Ur10` for input `UR10`.
-  The "colission" filename typo was fixed in Phase 2. Run it from `examples/`. It
-  scaffolds from the TIAGo layout.
-- **`.github/` and `.waylog/` are gitignored** — local-only, not shipped. The workflow
-  skill at `.github/skills/figaroh-examples-workflow/SKILL.md` is useful but won't exist
-  on a fresh clone.
-- **No CI, no pre-commit, no lint config** in this repo. The only quality gate is running
-  `validate.py` (or `pytest`) manually. The core `figaroh/` repo has the pre-commit hooks,
-  not this one. (Phase 6 §6.1 will add CI.)
+- **Logging is now `WARNING` by default** (changed from `CRITICAL` in Phase 3). Use
+  `--verbose` / `-v` flag on any script to enable `INFO`-level logging.
+- **All entry-point scripts have argparse** with `--config`, `--urdf`, `--verbose` flags
+  (Phase 3). Run `python <script> --help` to see available options.
+- **`create_example.sh` bugs fixed** in Phase 6: title-case now preserves acronyms
+  (UR10 stays UR10, not Ur10), replace order fixed, temp file cleanup via trap.
+- **`.github/workflows/` is tracked** (CI workflow added in Phase 6). The rest of
+  `.github/` remains gitignored (local skills, etc.).
+- **CI runs pytest on push/PR** via GitHub Actions (Phase 6 §6.1). The workflow
+  checks out both `figaroh-examples` and `figaroh-plus` repos, sets up conda
+  `figaroh-dev`, and runs `pytest tests/ -v`.
 
 ## Web interface
 
 - Viser-based, under active development (expect breaking changes).
 - Run from `web-interface/`: `python main.py` (default `http://localhost:8080`).
   Flags: `--port`, `--host`, `--examples-path`, `--models-path`, `--debug`, `--classic`.
-- Known gap: `core/example_loader.py` looks for `config.yaml`/`calibration.yaml` but
-  examples use `*_unified_config.yaml`, so config discovery finds nothing until fixed
-  (`IMPROVEMENT_PLAN.md` §6.3).
+- Config discovery fixed in Phase 6: `core/example_loader.py` now looks for
+  `config/*_unified_config.yaml` first, then falls back to legacy filenames.
 
 ## Branches
 
@@ -118,19 +117,13 @@ shared `models/` (robot description packages) and a Viser-based `web-interface/`
 ## Known issues — read `IMPROVEMENT_PLAN.md`
 
 `IMPROVEMENT_PLAN.md` is a 39-item audit (P0–P6) of this repo's current state.
-**Phases 1, 2, and 5 are complete** (16 items fixed: failing tests, path bugs,
-copy-paste typos, dead code, disconnected workflows). Remaining work:
-- **Phase 3** (P2): standardize practices — `if __name__` guards, logging levels,
-  argparse/CLI, error handling, move hardcoded params to YAML, type hints
-- **Phase 4** (P3): config & model cleanup — consolidate TIAGo configs, deduplicate
-  templates, symlink URDFs, standardize paths
-- **Phase 6** (P5): infrastructure — CI workflows, fix `run_tests.py`, web-interface
-  discovery, templates README, `create_example.sh` bugs
+**Phases 1-6 are complete** (39/39 items fixed: failing tests, path bugs, copy-paste
+typos, dead code, standardized practices, config cleanup, infrastructure, URDF
+deduplication, smoke tests). Only Phase 7 remains:
 - **Phase 7** (P6): complete incomplete examples — add missing scripts to TALOS and
-  Staubli TX40
+  Staubli TX40 (new feature work, deferred)
 
-Consult `IMPROVEMENT_PLAN.md` before assuming a script that errors is your bug — it
-may already be a tracked known issue. Run `python validate.py` to check current state.
+Run `python validate.py` to check current state. All 9 scripts pass, 3 skip (IPOPT).
 
 ## CodeGraph
 

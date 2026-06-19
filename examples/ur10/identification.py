@@ -13,15 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import argparse
 import logging
 import sys
+import yaml
 from pathlib import Path
-
-# Configure logging at application entry point
-logging.basicConfig(
-    level=logging.CRITICAL,
-    format="%(name)s - %(levelname)s - %(message)s",
-)
 
 # Add project root to path for imports (prefer `pip install -e .` instead)
 project_root = Path(__file__).parents[2]
@@ -31,78 +29,107 @@ if str(project_root) not in sys.path:
 from examples.ur10.utils.ur10_tools import UR10Identification
 from figaroh.tools.robot import load_robot
 
-def main():
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="UR10 dynamic parameter identification")
+    parser.add_argument("--config", type=str, default="config/ur10_unified_config.yaml",
+                        help="Path to unified config YAML file")
+    parser.add_argument("--urdf", type=str, default="urdf/ur10_robot.urdf",
+                        help="Path to robot URDF file")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Enable verbose (INFO) logging")
+    return parser.parse_args()
+
+
+def main(args: argparse.Namespace) -> None:
     """Main function for UR10 dynamic parameter identification."""
+    # Validate input files
+    urdf_path = Path(args.urdf)
+    if not urdf_path.exists():
+        print(f"Error: URDF file not found: {urdf_path}", file=sys.stderr)
+        sys.exit(1)
 
-    # Load UR10 robot model
+    config_path = Path(args.config)
+    if not config_path.exists():
+        print(f"Error: Config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
 
-    ur10 = load_robot(
-        "urdf/ur10_robot.urdf",
-        package_dirs="../../models",
-        load_by_urdf=True,
-    )
+    try:
+        # Load UR10 robot model
+        ur10 = load_robot(
+            args.urdf,
+            package_dirs="../../models",
+            load_by_urdf=True,
+        )
 
-    # Create identification object
-    ur10_identif = UR10Identification(
-        robot=ur10,
-        config_file="config/ur10_unified_config.yaml"
-    )
-    ps = ur10_identif.identif_config
-    ps["active_joints"] = [
-        "shoulder_pan_joint",
-        "shoulder_lift_joint", 
-        "elbow_joint",
-        "wrist_1_joint",
-        "wrist_2_joint",
-        "wrist_3_joint"
-    ]
-    # Joint parameters
-    ps["act_Jid"] = [
-        ur10_identif.model.getJointId(i) for i in ps["active_joints"]
-    ]
-    ps["act_J"] = [ur10_identif.model.joints[jid] for jid in ps["act_Jid"]]
-    ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
-    ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
+        # Create identification object
+        ur10_identif = UR10Identification(
+            robot=ur10,
+            config_file=args.config,
+        )
 
-    # Initialize with data processing
-    ur10_identif.initialize()
+        # Load active joints from unified config (eliminates DRY with config)
+        with open(args.config) as f:
+            cfg = yaml.safe_load(f)
+        active_joints = cfg["robot"]["properties"]["joints"]["active_joints"]
 
-    # Perform identification using the base class solve method
-    ur10_identif.solve(
-        decimate=False,
-        plotting=True,
-        save_results=False,
-    )
+        ps = ur10_identif.identif_config
+        ps["active_joints"] = active_joints
+        # Joint parameters
+        ps["act_Jid"] = [
+            ur10_identif.model.getJointId(i) for i in ps["active_joints"]
+        ]
+        ps["act_J"] = [ur10_identif.model.joints[jid] for jid in ps["act_Jid"]]
+        ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
+        ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
 
-    # Display results
-    # Print results summary
-    print("\n" + "=" * 60)
-    print("UR10 DYNAMIC PARAMETER IDENTIFICATION RESULTS")
-    print("=" * 60)
+        # Initialize with data processing
+        ur10_identif.initialize()
 
-    print(
-        f"Number of base parameters identified: "
-        f"{len(ur10_identif.params_base)}"
-    )
-    print(f"Correlation coefficient: {ur10_identif.correlation:.4f}")
+        # Perform identification using the base class solve method
+        ur10_identif.solve(
+            decimate=False,
+            plotting=True,
+            save_results=False,
+        )
 
-    if hasattr(ur10_identif, 'result'):
-        for key, value in ur10_identif.result.items():
-            if isinstance(value, (int, float)):
-                if isinstance(value, float):
-                    print(f"{key}: {value:.6f}")
+        # Display results
+        # Print results summary
+        print("\n" + "=" * 60)
+        print("UR10 DYNAMIC PARAMETER IDENTIFICATION RESULTS")
+        print("=" * 60)
+
+        print(
+            f"Number of base parameters identified: "
+            f"{len(ur10_identif.params_base)}"
+        )
+        print(f"Correlation coefficient: {ur10_identif.correlation:.4f}")
+
+        if hasattr(ur10_identif, 'result'):
+            for key, value in ur10_identif.result.items():
+                if isinstance(value, (int, float)):
+                    if isinstance(value, float):
+                        print(f"{key}: {value:.6f}")
+                    else:
+                        print(f"{key}: {value}")
                 else:
-                    print(f"{key}: {value}")
-            else:
-                print(f"{key}: {type(value).__name__} of length {len(value)}")
+                    print(f"{key}: {type(value).__name__} of length {len(value)}")
 
-    print("\nBase parameters:")
-    for i, param_name in enumerate(ur10_identif.params_base):
-        print(f"{i + 1:2d}. {param_name}: {ur10_identif.phi_base[i]:10.6f}")
+        print("\nBase parameters:")
+        for i, param_name in enumerate(ur10_identif.params_base):
+            print(f"{i + 1:2d}. {param_name}: {ur10_identif.phi_base[i]:10.6f}")
 
-    print("\nIdentification completed successfully!")
-    return ur10_identif
+        print("\nIdentification completed successfully!")
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        raise
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    main(args)

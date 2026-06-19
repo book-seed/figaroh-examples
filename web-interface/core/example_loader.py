@@ -34,6 +34,7 @@ class ExampleLoader:
     def load_example(self, example_name: str) -> dict:
         """Load an example configuration from the specified directory."""
         import os
+        import glob as glob_module
         import yaml
         
         # Get the absolute path for this example
@@ -44,7 +45,22 @@ class ExampleLoader:
         if not os.path.exists(example_dir):
             raise FileNotFoundError(f"Example directory {example_dir} not found.")
         
-        # Look for common configuration files in the example directory
+        # 1. First, look for unified config files (*_unified_config.yaml) in config/ subdirectory
+        config_dir = os.path.join(example_dir, "config")
+        if os.path.isdir(config_dir):
+            unified_configs = sorted(glob_module.glob(os.path.join(config_dir, "*_unified_config.yaml")))
+            if unified_configs:
+                config_path = unified_configs[0]  # Take the first one
+                try:
+                    with open(config_path, 'r') as file:
+                        config = yaml.safe_load(file)
+                        config['example_name'] = example_name
+                        config['example_path'] = example_dir
+                        return config
+                except Exception as e:
+                    print(f"Error loading unified config file {config_path}: {e}")
+        
+        # 2. Fall back to legacy config files in the example root directory
         config_files = ['config.yaml', 'calibration.yaml', 'configuration.yaml', 'setup.yaml']
         
         for config_file in config_files:
@@ -60,7 +76,7 @@ class ExampleLoader:
                     print(f"Error loading config file {config_path}: {e}")
                     continue
         
-        # If no YAML config found, create a basic configuration
+        # 3. If no YAML config found, create a basic configuration
         return {
             'example_name': example_name,
             'example_path': example_dir,
