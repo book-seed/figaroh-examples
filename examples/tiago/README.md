@@ -234,7 +234,7 @@ These examples are designed to run in the figaroh-plus pixi `examples` environme
 
 ```bash
 cd /path/to/figaroh-plus
-pixi run -e examples python examples/tiago/calibration.py
+pixi run -e examples python calibration.py
 ```
 
 All dependencies (figaroh, numpy, scipy, matplotlib, pandas, pinocchio, cyipopt, etc.) are managed by pixi.

@@ -11,7 +11,7 @@ To use them with pixi:
 git clone --recurse-submodules https://github.com/book-seed/figaroh-plus.git
 cd figaroh-plus
 pixi install
-pixi run -e examples python examples/ur10/calibration.py
+cd figaroh-examples/examples/ur10 && pixi run -e examples python calibration.py
 ```
 
 If you cloned without `--recurse-submodules`, run:
