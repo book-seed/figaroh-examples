@@ -4,16 +4,33 @@ Examples for the [FIGAROH PLUS](https://github.com/thanhndv212/figaroh-plus) lib
 
 ## Install
 
+These examples are bundled as a git submodule of the main figaroh-plus repository.
+To use them with pixi:
+
 ```bash
+git clone --recurse-submodules https://github.com/book-seed/figaroh-plus.git
+cd figaroh-plus
+pixi install
+pixi run -e examples python examples/ur10/calibration.py
+```
+
+If you cloned without `--recurse-submodules`, run:
+
+```bash
+git submodule update --init --recursive
+```
+
+### Standalone Usage
+
+For standalone use (without the figaroh-plus repo):
+
+```bash
+git clone https://github.com/book-seed/figaroh-examples.git
+cd figaroh-examples
 pip install figaroh
-pip install -r requirements.txt
 ```
 
-If you use conda, some dependencies may be easier to install via conda:
-
-```bash
-conda install -c conda-forge pinocchio cyipopt
-```
+Note: This repo no longer ships `environment.yml` or `requirements.txt` — dependency management is handled by pixi in the parent figaroh-plus project.
 
 ## Run
 

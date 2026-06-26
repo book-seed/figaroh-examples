@@ -228,24 +228,16 @@ subject to:
 
 ---
 
-## Installation and Dependencies
+## Prerequisites
 
-### Required Packages
+These examples are designed to run in the figaroh-plus pixi `examples` environment:
+
 ```bash
-# Core dependencies
-pip install numpy scipy matplotlib picos cvxopt
-pip install pandas numdifftools cyipopt
-
-# Robotics libraries
-pip install pinocchio
+cd /path/to/figaroh-plus
+pixi run -e examples python examples/tiago/calibration.py
 ```
 
-### FIGAROH Framework
-This implementation requires the FIGAROH library:
-```bash
-cd figaroh/
-pip install -e .
-```
+All dependencies (figaroh, numpy, scipy, matplotlib, pandas, pinocchio, cyipopt, etc.) are managed by pixi.
 
 ## Usage Workflow
 
