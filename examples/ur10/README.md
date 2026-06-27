@@ -13,7 +13,7 @@ The UR10 framework provides four main capabilities:
 
 ## Tasks and Methodology
 
-### 1. Kinematic Calibration Task (`calibration_refactored.py`)
+### 1. Kinematic Calibration Task (`calibration.py`)
 
 #### Problem Statement
 Manufacturing tolerances and assembly errors in industrial robots cause systematic position errors of 5-10mm, making precision tasks impossible. These errors affect:
@@ -55,7 +55,7 @@ Where:
 
 ---
 
-### 2. Dynamic Parameter Identification Task (`identification_refactored.py`)
+### 2. Dynamic Parameter Identification Task (`identification.py`)
 
 #### Problem Statement
 Accurate dynamic models are essential for:
@@ -112,7 +112,7 @@ Where:
 
 ---
 
-### 3. Optimal Configuration Generation Task (`optimal_config_refactored.py`)
+### 3. Optimal Configuration Generation Task (`optimal_config.py`)
 
 #### Problem Statement
 Traditional calibration approaches use ad-hoc robot configurations (grid patterns, random poses, engineering intuition). This results in:
@@ -162,7 +162,7 @@ Where:
 
 ---
 
-### 4. Optimal Trajectory Generation Task (`optimal_trajectory_refactored.py`)
+### 4. Optimal Trajectory Generation Task (`optimal_trajectory.py`)
 
 #### Problem Statement
 Dynamic parameter identification requires "exciting" trajectories that:
@@ -271,29 +271,49 @@ task.save_results("results/")
 ### Running the Scripts
 
 ```bash
-# Kinematic calibration
-python calibration_refactored.py
+# ── Kinematic calibration ────────────────────────────────────────
+# Full pipeline: calibrate → plot → save → export → viser viz
+python calibration.py
 
-# Dynamic parameter identification
-python identification_refactored.py
+# Calibrate only (save timestamped .npz, skip export)
+python calibration.py --calibrate-only
 
-# Generate optimal calibration configurations
-python optimal_config_refactored.py -n 20
+# Load saved results → export URDF → verify FK (interactive .npz selection)
+python calibration.py --update-model
 
-# Generate optimal identification trajectory
-python optimal_trajectory_refactored.py
+# Visually validate a previously exported modified URDF
+python calibration.py --viz-validation
+
+# Interactive step selection
+python calibration.py --interactive
+
+# Equivalent to calibration.py --update-model
+python update_model.py
+
+# ── Dynamic parameter identification ────────────────────────────
+python identification.py
+
+# ── Optimal configuration generation ─────────────────────────────
+python optimal_config.py -n 20
+
+# ── Optimal trajectory generation ───────────────────────────────
+python optimal_trajectory.py
 ```
+
+All saved files are timestamped to avoid overwriting:
+- Calibration results: `data/calibration/calibration_results_{ts}.npz`
+- Modified URDFs: `urdf/ur10_robot_modified_{ts}.urdf`
 
 ## Complete Workflow
 
 ### 1. Optimal Experimental Design Phase
 ```bash
 # Generate optimal configurations for calibration
-python optimal_config_refactored.py -n 15
+python optimal_config.py -n 15
 # Output: results/ur10_optimal_configurations.yaml
 
 # Generate optimal trajectory for identification
-python optimal_trajectory_refactored.py
+python optimal_trajectory.py
 # Output: results/ur10_optimal_trajectory.yaml and .csv
 ```
 
@@ -306,11 +326,11 @@ python optimal_trajectory_refactored.py
 ### 3. Parameter Estimation Phase
 ```bash
 # Perform kinematic calibration
-python calibration_refactored.py
+python calibration.py
 # Output: results/ur10_calibration_results.yaml
 
 # Perform dynamic identification
-python identification_refactored.py
+python identification.py
 # Output: results/ur10_identification_results.yaml
 ```
 
@@ -318,21 +338,27 @@ python identification_refactored.py
 
 ```
 ur10/
-├── calibration_refactored.py         # Kinematic calibration main script
-├── identification_refactored.py      # Dynamic identification main script
-├── optimal_config_refactored.py      # Optimal configuration generation
-├── optimal_trajectory_refactored.py  # Optimal trajectory generation
+├── calibration.py               # Combined calibration + export + viz (flags)
+├── update_model.py              # Thin shim → calibration.py --update-model
+├── identification.py            # Dynamic identification main script
+├── optimal_config.py            # Optimal configuration generation
+├── optimal_trajectory.py        # Optimal trajectory generation
 ├── utils/
-│   └── ur10_tools.py                 # UR10-specific implementation classes
+│   └── ur10_tools.py            # UR10-specific implementation classes
 ├── config/
-│   └── ur10_config.yaml             # UR10 configuration parameters
+│   └── ur10_unified_config.yaml # UR10 unified config (default)
 ├── data/
-│   ├── robot.urdf                   # UR10 robot model
-│   ├── ur10_measurements.csv        # Calibration measurement data
+│   ├── calibration/
+│   │   └── calibration_results_*.npz   # Timestamped calibration results
+│   ├── robot.urdf                  # UR10 robot model
+│   ├── ur10_measurements.csv       # Calibration measurement data
 │   ├── identification_q_simulation.csv   # Joint position trajectory
 │   └── identification_tau_simulation.csv # Joint torque measurements
-├── results/                         # Generated results and outputs
-└── README.md                        # This documentation
+├── urdf/
+│   ├── ur10_robot.urdf              # Nominal URDF (default)
+│   └── ur10_robot_modified_*.urdf   # Timestamped modified URDFs
+├── results/                      # Generated results and outputs
+└── README.md                     # This documentation
 ```
 
 ## Configuration

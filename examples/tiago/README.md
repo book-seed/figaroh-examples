@@ -264,9 +264,14 @@ pip install -e .
 
 3. **Perform Kinematic Calibration**:
    ```bash
+   # Full pipeline: calibrate → plot → save → export → viser viz
    python calibration.py
+
+   # Or calibrate only, then update model separately
+   python calibration.py --calibrate-only
+   python calibration.py --update-model
    ```
-   Output: Calibrated kinematic parameters
+   Output: Timestamped `.npz` results and modified URDF
 
 4. **Generate Optimal Identification Trajectory**:
    ```bash
@@ -299,18 +304,45 @@ Override the default config with `--config <path>` on any script.
 ### Usage
 
 ```bash
-# Kinematic calibration (defaults to unified config)
+# ── Kinematic calibration ────────────────────────────────────────
+# Full pipeline: calibrate → plot → save → export → viser viz
 python calibration.py
 
-# Dynamic parameter identification
+# Calibrate only (save timestamped .npz, skip export)
+python calibration.py --calibrate-only
+
+# Load saved results → export URDF → verify FK (interactive .npz selection)
+python calibration.py --update-model
+
+# Visually validate a previously exported modified URDF
+python calibration.py --viz-validation
+python calibration.py --viz-validation --model urdf/tiago_48_schunk_modified_20260127.urdf
+
+# Interactive step selection
+python calibration.py --interactive
+
+# Suppress plots (useful in CI/headless)
+python calibration.py --no-plot
+
+# Show all flags
+python calibration.py --help
+
+# Equivalent to calibration.py --update-model
+python update_model.py
+
+# ── Dynamic parameter identification ────────────────────────────
 python identification.py
 
-# Optimal configuration generation (specify end-effector)
+# ── Optimal configuration generation ─────────────────────────────
 python optimal_config.py --end-effector hey5
 
-# Optimal trajectory generation (requires IPOPT)
+# ── Optimal trajectory generation (requires IPOPT) ───────────────
 python optimal_trajectory.py
 ```
+
+All saved files are timestamped to avoid overwriting:
+- Calibration results: `data/calibration/calibration_results_{ts}.npz`
+- Modified URDFs: `urdf/tiago_48_schunk_modified_{ts}.urdf`
 
 ## Architecture
 
@@ -328,21 +360,29 @@ Standalone Classes:
 ### File Structure
 ```
 examples/tiago/
-├── calibration.py                     # Main calibration script
-├── identification.py       # Refactored identification
-├── optimal_config.py       # Refactored optimal config
-├── optimal_trajectory.py   # Refactored optimal trajectory
+├── calibration.py                     # Combined calibration + export + viz (flags)
+├── update_model.py                    # Thin shim → calibration.py --update-model
+├── identification.py                  # Dynamic parameter identification
+├── optimal_config.py                  # Optimal config generation
+├── optimal_trajectory.py              # Optimal trajectory generation
 ├── utils/
 │   ├── tiago_tools.py                 # All TIAGo-specific classes
 │   ├── simplified_collision_model.py  # Collision geometry
 │   └── cubic_spline.py                # Trajectory generation
 ├── config/
-│   ├── tiago_config.yaml             # Main configuration
-│   └── tiago_config_*.yaml           # Variant configurations
-└── data/
-    ├── calibration/                   # Calibration datasets
-    ├── identification/                # Identification datasets
-    └── optimal_configurations/        # Generated optimal configs
+│   ├── tiago_unified_config.yaml      # Main unified config (default)
+│   └── archive/                       # Legacy configs
+├── data/
+│   ├── calibration/
+│   │   ├── calibration_results_*.npz  # Timestamped calibration results
+│   │   ├── mocap/                     # Raw calibration measurement CSVs
+│   │   └── optimal_configurations/    # Generated optimal configs
+│   ├── identification/                # Raw identification datasets
+│   ├── identification/                # Raw identification datasets
+│   └── optimal_configurations/        # Generated optimal configs
+└── urdf/
+    ├── tiago_48_schunk.urdf              # Nominal URDF
+    └── tiago_48_schunk_modified_*.urdf   # Timestamped modified URDFs
 ```
 
 ## Results and Validation
