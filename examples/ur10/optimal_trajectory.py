@@ -15,6 +15,9 @@
 
 from __future__ import annotations
 
+from typing import Any
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="importlib._bootstrap")
 import argparse
 import logging
 import sys
@@ -42,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--urdf",
         type=str,
-        default="urdf/ur10_robot.urdf",
+        default="../../models/ur_description/urdf/ur10_robot.urdf",
         help="Path to robot URDF file",
     )
     parser.add_argument(
@@ -66,15 +69,11 @@ def main(args: argparse.Namespace) -> None:
 
     try:
         # Load UR10 robot model
-        ur10 = load_robot(
-            args.urdf,
-            package_dirs="../../models",
-            load_by_urdf=True,
-        )
+        ur10 = load_robot(args.urdf, package_dirs="../../models", load_by_urdf=True)
 
         # Load active joints from unified config (eliminates DRY with config)
         with open(args.config) as f:
-            cfg = yaml.safe_load(f)
+            cfg: Any = yaml.safe_load(f)
         active_joints = cfg["robot"]["properties"]["joints"]["active_joints"]
 
         # Create optimal trajectory object
