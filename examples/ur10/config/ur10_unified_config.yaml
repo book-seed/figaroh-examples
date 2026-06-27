@@ -65,6 +65,7 @@ tasks:
 
     data:
       source_file: "data/calibration.csv"
+      validation_data_file: ""
       sample_configurations_file: None
       number_of_samples: 29
 
@@ -157,6 +158,7 @@ variants:
       number_of_samples: 10
     data:
       source_file: "data/quick_calibration.csv"
+      validation_data_file: ""
 
   # High-precision calibration
   precision_calibration:
@@ -167,6 +169,7 @@ variants:
       number_of_samples: 100
     data:
       source_file: "data/precision_calibration.csv"
+      validation_data_file: ""
 
   # Identification with external load
   loaded_identification:

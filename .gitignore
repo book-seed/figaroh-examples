@@ -68,9 +68,12 @@ logs/
 .codegraph/
 
 # Generated calibration outputs
-examples/talos/data/calibration_results.npz
-examples/talos/data/offset.xacro
-examples/talos/data/offset.yaml
+**/calibration_results.npz
+**/calibration_results_*.npz
+**/*_modified.urdf
+**/*_modified_*.urdf
+**/offset.xacro
+**/offset.yaml
 
 # Temporary files
 shared/
