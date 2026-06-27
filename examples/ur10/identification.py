@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="importlib._bootstrap")
 import argparse
 import logging
 import sys
@@ -44,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--urdf",
         type=str,
-        default="urdf/ur10_robot.urdf",
+        default="../../models/ur_description/urdf/ur10_robot.urdf",
         help="Path to robot URDF file",
     )
     parser.add_argument(
@@ -55,30 +57,22 @@ def parse_args() -> argparse.Namespace:
 
 def main(args: argparse.Namespace) -> None:
     """Main function for UR10 dynamic parameter identification."""
-    # Validate input files
-    urdf_path = Path(args.urdf)
+
+    urdf_path = Path(args.urdf).resolve()
     if not urdf_path.exists():
         print(f"Error: URDF file not found: {urdf_path}", file=sys.stderr)
         sys.exit(1)
 
-    config_path = Path(args.config)
+    config_path = Path(args.config).resolve()
     if not config_path.exists():
         print(f"Error: Config file not found: {config_path}", file=sys.stderr)
         sys.exit(1)
 
     try:
-        # Load UR10 robot model
-        ur10 = load_robot(
-            args.urdf,
-            package_dirs="../../models",
-            load_by_urdf=True,
-        )
-
+        ur10 = load_robot(args.urdf, package_dirs="../../models", load_by_urdf=True, loader="figaroh")
+                
         # Create identification object
-        ur10_identif = UR10Identification(
-            robot=ur10,
-            config_file=args.config,
-        )
+        ur10_identif = UR10Identification(robot=ur10, config_file=args.config)
 
         # Load active joints from unified config (eliminates DRY with config)
         with open(args.config) as f:
@@ -134,7 +128,7 @@ def main(args: argparse.Namespace) -> None:
         raise
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     args = parse_args()
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
