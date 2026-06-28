@@ -77,6 +77,7 @@ tasks:
 
     data:
       source_file: "data/talos_left_arm_02_10_contact.csv"
+      validation_data_file: ""
       sample_configurations_file: "data/optimal_configs/talos_optimal_configs.yaml"
       number_of_samples: 200  # More samples for complex humanoid
 
