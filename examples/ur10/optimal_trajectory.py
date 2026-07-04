@@ -49,6 +49,12 @@ def parse_args() -> argparse.Namespace:
         help="Path to robot URDF file",
     )
     parser.add_argument(
+        "--model",
+        type=str,
+        default="../../models",
+        help="Path to robot mesh file",
+    )
+    parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable verbose (INFO) logging"
     )
     return parser.parse_args()
@@ -57,35 +63,38 @@ def parse_args() -> argparse.Namespace:
 def main(args: argparse.Namespace) -> None:
     """Main function for UR10 optimal trajectory generation."""
     # Validate input files
-    urdf_path = Path(args.urdf)
+    urdf_path = Path(args.urdf).resolve()
     if not urdf_path.exists():
         print(f"Error: URDF file not found: {urdf_path}", file=sys.stderr)
         sys.exit(1)
 
-    config_path = Path(args.config)
+    config_path = Path(args.config).resolve()
     if not config_path.exists():
         print(f"Error: Config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
+        
+    model_path = Path(args.model).resolve()
+    if not model_path.exists():
+        print(f"Error: Model file not found: {model_path}", file=sys.stderr)
         sys.exit(1)
 
     try:
         # Load UR10 robot model
-        ur10 = load_robot(args.urdf, package_dirs="../../models", load_by_urdf=True)
+        ur10 = load_robot(args.urdf, package_dirs=model_path, load_by_urdf=True)
 
         # Load active joints from unified config (eliminates DRY with config)
-        with open(args.config) as f:
-            cfg: Any = yaml.safe_load(f)
-        active_joints = cfg["robot"]["properties"]["joints"]["active_joints"]
+        # with open(args.config) as f:
+        #     cfg: Any = yaml.safe_load(f)
+        # active_joints = cfg["robot"]["properties"]["joints"]["active_joints"]
 
         # Create optimal trajectory object
-        ur10_traj = OptimalTrajectoryIPOPT(
-            robot=ur10,
-            active_joints=active_joints,
-            config_file=args.config,
-        )
-        ps = ur10_traj.identif_config
+        # ur10_traj = OptimalTrajectoryIPOPT(robot=ur10, active_joints=active_joints,config_file=args.config)
+        
+        # active_joints可以从ur10_traj.identif_config中获取，所以没必要再单独传参
+        ur10_traj = OptimalTrajectoryIPOPT(robot=ur10, config_file=args.config)
 
-        # Joint parameters
-        ps["active_joints"] = active_joints
+        # 在ur10_traj.identif_config增加属性
+        ps = ur10_traj.identif_config
         ps["act_Jid"] = [ur10_traj.model.getJointId(i) for i in ps["active_joints"]]
         ps["act_J"] = [ur10_traj.model.joints[jid] for jid in ps["act_Jid"]]
         ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
@@ -114,7 +123,7 @@ def main(args: argparse.Namespace) -> None:
 if __name__ == "__main__":
     args = parse_args()
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING,
+        level=logging.INFO if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
     main(args)

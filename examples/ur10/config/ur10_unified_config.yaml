@@ -109,7 +109,7 @@ tasks:
     enabled: true
 
     problem:
-      soft_lim: 0.1     # joint limit discount (increased from 0.05)
+      soft_lim: [0.100, 0.101, 0.102, 0.103, 0.104, 0.105]     # joint limit discount (increased from 0.05)
       max_attempts: 500 # maximum attempts to find feasible trajectory
 
     trajectory:

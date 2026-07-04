@@ -602,11 +602,12 @@ class OptimalTrajectoryIPOPT(BaseOptimalTrajectory):
     def __init__(
         self,
         robot: Any,
-        active_joints: List[str],
+        active_joints: List[str] = None,
         config_file: str = "config/ur10_unified_config.yaml",
+        **kwargs,
     ) -> None:
         """Initialize the UR10 optimal trajectory generator."""
-        super().__init__(robot, active_joints, config_file)
+        super().__init__(robot, active_joints, config_file, **kwargs)
         self.logger.info("UR10 OptimalTrajectoryIPOPT initialized")
 
     def create_ipopt_problem(
