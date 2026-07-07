@@ -50,10 +50,13 @@ from pathlib import Path
 
 import numpy as np
 
-# Add project root to path for imports (prefer `pip install -e .` instead)
-project_root = Path(__file__).parents[2]
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+# Add project root and source package path for imports (prefer `pip install -e .` instead)
+examples_root = Path(__file__).resolve().parents[2]
+repo_root = examples_root.parent
+src_root = repo_root / "src"
+for path in (str(src_root), str(examples_root)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 from examples.ur10.utils.ur10_tools import UR10Calibration  # noqa: E402
 from figaroh.tools.robot import load_robot  # noqa: E402

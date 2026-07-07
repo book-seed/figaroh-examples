@@ -109,13 +109,13 @@ tasks:
     enabled: true
 
     problem:
-      soft_lim: [0.100, 0.101, 0.102, 0.103, 0.104, 0.105]     # joint limit discount (increased from 0.05)
-      max_attempts: 500 # maximum attempts to find feasible trajectory
+      soft_lim: [0.05]      # joint limit discount (increased from 0.05)
+      max_attempts: 500     # maximum attempts to find feasible trajectory 初始轨迹猜测，随机尝试次数
 
     trajectory:
-      waypoints: 7       # number of waypoints (reduced from 5)
-      frequency: 100     # frequency in Hz (reduced from 100)
-      segment_duration: 2.0 # window time between waypoints (reduced from 2)
+      waypoints: 7          # number of waypoints (reduced from 5) trajectory_config["n_wps"]
+      frequency: 100        # sample frequency in Hz (reduced from 100) trajectory_config["freq"] 不强制要求和控制频率保持一致
+      segment_duration: 2.0 # window time between waypoints (reduced from 2) trajectory_config["t_s"]
 
     constraints:
       velocity_scaling: 0.5
