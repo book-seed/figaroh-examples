@@ -32,33 +32,14 @@ if str(project_root) not in sys.path:
 from examples.ur10.utils.ur10_tools import OptimalTrajectoryIPOPT
 from figaroh.tools.robot import load_robot
 
-
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="UR10 optimal trajectory generation")
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="config/ur10_unified_config.yaml",
-        help="Path to unified config YAML file",
-    )
-    parser.add_argument(
-        "--urdf",
-        type=str,
-        default="../../models/ur_description/urdf/ur10_robot.urdf",
-        help="Path to robot URDF file",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="../../models",
-        help="Path to robot mesh file",
-    )
-    parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Enable verbose (INFO) logging"
-    )
+    parser.add_argument("--config", type=str, default="config/ur10_unified_config.yaml", help="Path to unified config YAML file")
+    parser.add_argument("--urdf", type=str, default="../../models/ur_description/urdf/ur10_robot.urdf",help="Path to robot URDF file")
+    parser.add_argument("--model", type=str, default="../../models", help="Path to robot mesh file")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose (INFO) logging")
     return parser.parse_args()
-
 
 def main(args: argparse.Namespace) -> None:
     """Main function for UR10 optimal trajectory generation."""
@@ -79,42 +60,26 @@ def main(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     try:
-        # Load UR10 robot model
         ur10 = load_robot(args.urdf, package_dirs=model_path, load_by_urdf=True)
-
-        # Load active joints from unified config (eliminates DRY with config)
-        # with open(args.config) as f:
-        #     cfg: Any = yaml.safe_load(f)
-        # active_joints = cfg["robot"]["properties"]["joints"]["active_joints"]
-
-        # Create optimal trajectory object
-        # ur10_traj = OptimalTrajectoryIPOPT(robot=ur10, active_joints=active_joints,config_file=args.config)
-        
-        # active_joints可以从ur10_traj.identif_config中获取，所以没必要再单独传参
         ur10_traj = OptimalTrajectoryIPOPT(robot=ur10, config_file=args.config)
 
-        # 在ur10_traj.identif_config增加属性
+        # add attribute in ur10_traj.identif_config
         ps = ur10_traj.identif_config
         ps["act_Jid"] = [ur10_traj.model.getJointId(i) for i in ps["active_joints"]]
         ps["act_J"] = [ur10_traj.model.joints[jid] for jid in ps["act_Jid"]]
         ps["act_idxq"] = [J.idx_q for J in ps["act_J"]]
         ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
 
-        # Initialize
         ur10_traj.initialize()
-
-        # Generate optimal trajectory
         optimal_trajectory = ur10_traj.solve(stack_reps=2)
 
         if optimal_trajectory is not None:
-            # Display results
             print("Optimal trajectory generation completed successfully!")
-            # Plot and save results
+            ur10_traj.save_results()
             ur10_traj.plot_results()
         else:
-            print(
-                "Failed to generate optimal trajectory. Check constraints and parameters."
-            )
+            print("Failed to generate optimal trajectory. Check constraints and parameters.")
+            
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         raise
