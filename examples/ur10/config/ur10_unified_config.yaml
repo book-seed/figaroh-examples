@@ -109,7 +109,7 @@ tasks:
     enabled: true
 
     problem:
-      soft_lim: [0.05]      # joint limit discount (increased from 0.05)
+      soft_lim: [0.01]      # joint limit discount (increased from 0.05)
       max_attempts: 500     # maximum attempts to find feasible trajectory 初始轨迹猜测，随机尝试次数
 
     trajectory:
@@ -118,8 +118,8 @@ tasks:
       segment_duration: 2.0 # window time between waypoints (reduced from 2) trajectory_config["t_s"]
 
     constraints:
-      velocity_scaling: 0.5
-      acceleration_scaling: 0.5
+      # velocity_scaling: 0.5
+      # acceleration_scaling: 0.5
 
     output:
       save_trajectory: true
