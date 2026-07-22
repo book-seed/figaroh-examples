@@ -109,17 +109,24 @@ tasks:
     enabled: true
 
     problem:
-      soft_lim: [0.01]      # joint limit discount (increased from 0.05)
+      soft_lim: [0.01]      # joint limit discount 关节限位安全裕度，每个关节可设置不同的参数
       max_attempts: 500     # maximum attempts to find feasible trajectory 初始轨迹猜测，随机尝试次数
 
     trajectory:
-      waypoints: 7          # number of waypoints (reduced from 5) trajectory_config["n_wps"]
-      frequency: 100        # sample frequency in Hz (reduced from 100) trajectory_config["freq"] 不强制要求和控制频率保持一致
-      segment_duration: 2.0 # window time between waypoints (reduced from 2) trajectory_config["t_s"]
+      type: "fourier"       # "spline" or "fourier"
 
-    constraints:
-      # velocity_scaling: 0.5
-      # acceleration_scaling: 0.5
+      fourier:
+        n_harmonics: 5            # 谐波数（默认 5）
+        fourier_frequency: null   # 基频 rad/s（null → 2π/T）
+        n_samples: 200            # 采样点数（默认 200）
+        reg_lambda: 1.0e-6        # D-最优正则化系数，防止观测矩阵奇异
+        tanh_alpha_opt: 10        # 优化阶段摩擦平滑系数
+        tanh_alpha_id: 100        # 辨识阶段摩擦平滑系数，越大越接近真实摩擦模型sign(v)
+
+      spline:
+        waypoints: 7              # number of waypoints "trajectory_config["n_wps"]"
+        frequency: 100            # sample frequency in Hz "trajectory_config["freq"]" 不强制要求和控制频率保持一致
+        segment_duration: 2.0     # window time between waypoints "trajectory_config["t_s"]"
 
     output:
       save_trajectory: true
