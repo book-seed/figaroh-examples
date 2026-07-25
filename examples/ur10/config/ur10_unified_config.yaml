@@ -128,9 +128,9 @@ tasks:
         frequency: 100            # sample frequency in Hz "trajectory_config["freq"]" 不强制要求和控制频率保持一致
         segment_duration: 2.0     # window time between waypoints "trajectory_config["t_s"]"
 
-    output:
-      save_trajectory: true
-      output_file: "data/trajectories/ur10_optimal_trajectory.yaml"
+    # output:
+    #   save_trajectory: true
+    #   output_file: "data/trajectories/ur10_{}_optimal_trajectory.yaml"
 
 # UR10-specific custom parameters
 custom:

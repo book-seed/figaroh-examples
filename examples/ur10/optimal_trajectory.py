@@ -21,7 +21,6 @@ warnings.filterwarnings("ignore", category=RuntimeWarning, module="importlib._bo
 import argparse
 import logging
 import sys
-import yaml
 from pathlib import Path
 
 # Add project root to path for imports (prefer `pip install -e .` instead)
