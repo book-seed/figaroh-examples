@@ -118,7 +118,7 @@ tasks:
       fourier:
         n_harmonics: 5            # 谐波数（默认 5）
         fourier_frequency: null   # 基频 rad/s（null → 2π/T）
-        n_samples: 200            # 采样点数（默认 200）
+        n_samples: 300            # 采样点数（默认 200）
         reg_lambda: 1.0e-6        # D-最优正则化系数，防止观测矩阵奇异
         tanh_alpha_opt: 10        # 优化阶段摩擦平滑系数
         tanh_alpha_id: 100        # 辨识阶段摩擦平滑系数，越大越接近真实摩擦模型sign(v)
