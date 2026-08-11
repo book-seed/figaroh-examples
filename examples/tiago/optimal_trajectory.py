@@ -131,13 +131,20 @@ def main() -> dict | None:
         opt_traj.initialize()
 
         # Run trajectory optimization
-        results = opt_traj.solve(stack_reps=2)
+        results = opt_traj.solve()
 
         # Plot results
-        if results.get("T_F"):
+        has_results = bool(
+            results.get("T_F") or results.get("fourier_coeffs") is not None
+        )
+        if has_results:
             opt_traj.plot_results()
             plot_condition_number_evolution(results)
-            print(f"Generated {len(results['T_F'])} trajectory segments")
+            traj_type = results.get("trajectory_type", "spline")
+            if traj_type == "fourier":
+                print("Fourier trajectory optimization completed")
+            else:
+                print(f"Generated {len(results['T_F'])} trajectory segments")
 
         return results
     except Exception as e:
@@ -151,8 +158,15 @@ def main() -> dict | None:
 if __name__ == "__main__":
     results = main()
 
-    if results and results.get("T_F"):
+    has_results = bool(
+        results and (results.get("T_F") or results.get("fourier_coeffs") is not None)
+    )
+    if has_results:
         print("\nOptimization completed successfully!")
-        print(f"Generated {len(results['T_F'])} trajectory segments")
+        traj_type = results.get("trajectory_type", "spline")
+        if traj_type == "fourier":
+            print("Fourier trajectory optimization completed")
+        else:
+            print(f"Generated {len(results['T_F'])} trajectory segments")
     else:
         print("\nOptimization failed or produced no results")

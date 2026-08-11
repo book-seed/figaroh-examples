@@ -70,9 +70,9 @@ def main(args: argparse.Namespace) -> None:
         ps["act_idxv"] = [J.idx_v for J in ps["act_J"]]
 
         ur10_traj.initialize()
-        optimal_trajectory = ur10_traj.solve(stack_reps=2)
+        optimal_trajectory = ur10_traj.solve()
 
-        if optimal_trajectory is not None:
+        if optimal_trajectory is not None: 
             print("Optimal trajectory generation completed successfully!")
             ur10_traj.save_results()
             ur10_traj.plot_results()

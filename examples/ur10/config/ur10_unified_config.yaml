@@ -116,12 +116,10 @@ tasks:
       type: "fourier"       # "spline" or "fourier"
 
       fourier:
-        n_harmonics: 5              # 谐波数（默认 5）
-        fourier_frequency: 0.628    # 基频 rad/s（null → 2π/T） T暂给10s
-        n_samples: 300              # 采样点数（默认 200）
-        reg_lambda: 1.0e-6          # D-最优正则化系数，防止观测矩阵奇异
-        tanh_alpha_opt: 10          # 优化阶段摩擦平滑系数
-        tanh_alpha_id: 100          # 辨识阶段摩擦平滑系数，越大越接近真实摩擦模型sign(v)
+        n_harmonics: 5                      # 谐波数（默认 5）
+        fourier_frequency: 0.62831853072    # 基频 rad/s  T暂给10s
+        n_samples: 1000                     # 采样点数
+        reg_lambda: 1.0e-6                  # D-最优正则化系数，防止观测矩阵奇异
 
       spline:
         waypoints: 7              # number of waypoints "trajectory_config["n_wps"]"
@@ -131,6 +129,13 @@ tasks:
     # output:
     #   save_trajectory: true
     #   output_file: "data/trajectories/ur10_{}_optimal_trajectory.yaml"
+
+
+
+
+
+
+
 
 # UR10-specific custom parameters
 custom:
