@@ -73,7 +73,6 @@ def main(args: argparse.Namespace) -> None:
         optimal_trajectory = ur10_traj.solve()
 
         if optimal_trajectory is not None: 
-            print("Optimal trajectory generation completed successfully!")
             ur10_traj.save_results()
             ur10_traj.plot_results()
         else:
